@@ -1,0 +1,28 @@
+{
+  "name": "hank-agent-team",
+  "version": "1.0.0",
+  "description": "Hank Agent Team - 多部门AI协作流水线系统",
+  "main": "electron-main.js",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"electron .\"",
+    "build": "vite build",
+    "pack": "npm run build && node scripts/pack.js",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "electron": "^28.0.0",
+    "react-router-dom": "^6.20.0",
+    "lucide-react": "^0.300.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "typescript": "^5.3.0",
+    "tailwindcss": "^3.4.0",
+    "concurrently": "^8.2.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0"
+  }
+}
