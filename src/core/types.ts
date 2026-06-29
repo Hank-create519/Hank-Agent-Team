@@ -70,7 +70,8 @@ export interface PipelineState {
   errors: string[];
   paused: boolean;
   isRunning: boolean;              // 引擎运行中
-  reviewRejectCount: number;       // 审核打回次数，超3自动暂停
+  contentRejectCount: number;      // 内容审核打回次数，超3自动暂停
+  codeRejectCount: number;         // 代码审核打回次数，超3自动暂停
   models: ModelConfig[];           // 全局模型注册表
   userInput: string;               // 用户原始需求
   plan: Plan | null;               // 指挥部方案

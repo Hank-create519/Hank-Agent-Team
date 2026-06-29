@@ -65,10 +65,11 @@ export function syncFromApp(state: PipelineState) {
 }
 
 // ============ 辅助 ============
-function pickAgent(dept: Department): Agent | undefined {
-  // 优先队长，否则第一个成员
+function pickAgent(dept: Department): Agent {
   const deptAgents = _state.agents.filter(a => a.department === dept);
-  return deptAgents.find(a => a.role === 'leader') || deptAgents[0];
+  const agent = deptAgents.find(a => a.role === 'leader') || deptAgents[0];
+  if (!agent) throw new Error(`部门「${dept}」没有可用 Agent，请在团队配置中添加`);
+  return agent;
 }
 
 function setAgentStatus(agentId: string, status: Agent['status'], currentTask = '') {
@@ -194,6 +195,7 @@ export async function startPipeline(userInput: string) {
   if (_state.isRunning) return;
 
   _abortController = new AbortController();
+  _pausedResolve = null;
   _state = {
     ..._state,
     isRunning: true,
@@ -207,7 +209,8 @@ export async function startPipeline(userInput: string) {
     errors: [],
     stageOutputs: {},
     plan: null,
-    reviewRejectCount: 0,
+    contentRejectCount: 0,
+    codeRejectCount: 0,
   };
 
   // 重置所有 Agent 状态
@@ -247,12 +250,12 @@ export async function startPipeline(userInput: string) {
         contentApproved = true;
         addMessage('review', 'info', 'ack', '内容审核通过');
       } else {
-        _state = { ..._state, reviewRejectCount: _state.reviewRejectCount + 1 };
+        _state = { ..._state, contentRejectCount: _state.contentRejectCount + 1 };
         addMessage('review', 'info', 'review', `内容审核打回：${issues.join('；')}`);
-        addLog(pickAgent('review')!, 'review', `内容审核第 ${extractAttempts} 次打回`, 'warning');
+        addLog(pickAgent('review'), 'review', `内容审核第 ${extractAttempts} 次打回`, 'warning');
         notify();
-        if (_state.reviewRejectCount >= 3) {
-          addLog(pickAgent('command')!, 'command', '审核打回超过 3 次，自动暂停', 'error');
+        if (_state.contentRejectCount >= 3) {
+          addLog(pickAgent('command'), 'command', '内容审核打回超过 3 次，自动暂停', 'error');
           _state = { ..._state, paused: true };
           notify();
           await waitIfPaused();
@@ -280,12 +283,12 @@ export async function startPipeline(userInput: string) {
         codeApproved = true;
         addMessage('review', 'develop', 'ack', '代码审核通过');
       } else {
-        _state = { ..._state, reviewRejectCount: _state.reviewRejectCount + 1 };
+        _state = { ..._state, codeRejectCount: _state.codeRejectCount + 1 };
         addMessage('review', 'develop', 'review', `代码审核打回：${issues.join('；')}`);
-        addLog(pickAgent('review')!, 'review', `代码审核第 ${devAttempts} 次打回`, 'warning');
+        addLog(pickAgent('review'), 'review', `代码审核第 ${devAttempts} 次打回`, 'warning');
         notify();
-        if (_state.reviewRejectCount >= 3) {
-          addLog(pickAgent('command')!, 'command', '审核打回超过 3 次，自动暂停', 'error');
+        if (_state.codeRejectCount >= 3) {
+          addLog(pickAgent('command'), 'command', '代码审核打回超过 3 次，自动暂停', 'error');
           _state = { ..._state, paused: true };
           notify();
           await waitIfPaused();
@@ -300,12 +303,12 @@ export async function startPipeline(userInput: string) {
     let deploySuccess = false;
     for (let attempt = 0; attempt < 2 && !deploySuccess; attempt++) {
       if (_abortController?.signal.aborted) return;
-      if (attempt > 0) addLog(pickAgent('develop')!, 'develop', '部署重试第 1 次', 'warning');
+      if (attempt > 0) addLog(pickAgent('develop'), 'develop', '部署重试第 1 次', 'warning');
       await runStage('deploy', `请执行部署。任务：${userInput}\n\n代码：${_state.stageOutputs.develop?.content || ''}`);
       const deployOut = _state.stageOutputs.deploy?.content || '';
       deploySuccess = /部署成功|✓ 部署成功|部署完成/i.test(deployOut);
       if (!deploySuccess && attempt === 1) {
-        addLog(pickAgent('develop')!, 'develop', '部署重试仍失败，暂停汇报', 'error');
+        addLog(pickAgent('develop'), 'develop', '部署重试仍失败，暂停汇报', 'error');
         _state = { ..._state, paused: true, errors: [..._state.errors, '部署失败'] };
         notify();
         await waitIfPaused();

@@ -41,7 +41,7 @@ const PipelineView: React.FC<PipelineViewProps> = ({ pipeline, onStageChange, on
             流水线监控
           </h2>
           <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
-            {pipeline.paused ? '已暂停' : '运行中'} · 审核打回次数: {pipeline.reviewRejectCount}
+            {pipeline.paused ? '已暂停' : '运行中'} · 内容打回: {pipeline.contentRejectCount} · 代码打回: {pipeline.codeRejectCount}
           </span>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>

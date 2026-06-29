@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { PipelineState, Agent, ModelConfig, Department } from '../../core/types';
 import { getModelDisplayName } from '../../core/Pipeline';
 import { Plus, X, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
@@ -635,11 +635,11 @@ const AgentsPanel: React.FC<AgentsPanelProps> = ({
   const agents = pipeline.agents;
   const models = pipeline.models;
 
-  let nextId = 1;
+  const nextIdRef = useRef(1);
   const genId = (dept: Department) => {
     const ids = agents.filter(a => a.department === dept).map(a => a.id);
-    while (ids.includes(`${dept}-${nextId}`)) nextId++;
-    return `${dept}-${nextId++}`;
+    while (ids.includes(`${dept}-${nextIdRef.current}`)) nextIdRef.current++;
+    return `${dept}-${nextIdRef.current++}`;
   };
 
   return (
