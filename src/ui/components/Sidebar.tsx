@@ -11,6 +11,8 @@ interface SidebarProps {
 const NAV = [
   { id: 'dashboard', icon: '◆', label: '总览' },
   { id: 'pipeline', icon: '◇', label: '流水线' },
+  { id: 'review', icon: '◈', label: '审查详情' },
+  { id: 'monitor', icon: '◉', label: '监控' },
   { id: 'agents', icon: '◎', label: '团队' },
 ];
 

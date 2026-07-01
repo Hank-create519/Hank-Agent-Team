@@ -1,7 +1,7 @@
 import React from 'react';
 import { PipelineState, PipelineStage, StageOutput } from '../../core/types';
-import { Play, Pause, ShieldCheck, Box, Rocket, Activity, AlertTriangle, CheckCircle } from 'lucide-react';
-import { STAGE_PROGRESS } from '../../core/Pipeline';
+import { Play, Pause, ShieldCheck, Box, Rocket, Activity, AlertTriangle, CheckCircle, Gauge, Layers } from 'lucide-react';
+import { STAGE_PROGRESS_FULL } from '../../core/Pipeline';
 import { STAGE_LABELS } from '../../core/Engine';
 import LogStream from '../components/LogStream';
 
@@ -12,12 +12,14 @@ interface PipelineViewProps {
 }
 
 const STAGES: { stage: PipelineStage; label: string; icon: React.ElementType; desc: string }[] = [
-  { stage: 'init', label: '指挥部制定方案', icon: Activity, desc: '拆解需求 → 生成初步方案' },
-  { stage: 'audit_entry', label: '审查系统把关', icon: ShieldCheck, desc: '评估方案合理性 + 风险建议' },
-  { stage: 'extract', label: '信息部提取', icon: Box, desc: '提取关键信息 → 结构化输出' },
-  { stage: 'content_review', label: '内容审核', icon: ShieldCheck, desc: '审核信息准确性（只判错）' },
-  { stage: 'develop', label: '开发部编码', icon: Play, desc: '编码实现 + 队长自检' },
+  { stage: 'difficulty_assess', label: '难度评估', icon: Gauge, desc: '指挥部评估任务复杂度并分流' },
+  { stage: 'init', label: '制定方案', icon: Activity, desc: '拆解需求 → 生成方案' },
+  { stage: 'audit_entry', label: '审查框架把关', icon: ShieldCheck, desc: '三层对抗性审查（准备/判定/总结）' },
+  { stage: 'extract', label: '信息提取', icon: Box, desc: '提取关键信息 → 标注可信度' },
+  { stage: 'content_review', label: '内容审核', icon: ShieldCheck, desc: '审核信息准确性' },
+  { stage: 'develop', label: '开发编码', icon: Play, desc: '编码实现 + 队长自检' },
   { stage: 'code_review', label: '代码审核', icon: ShieldCheck, desc: '审核代码错误 + 改进建议' },
+  { stage: 'deep_audit', label: '系统级深度审计', icon: Layers, desc: '复杂档第二道防线：审查框架兜底' },
   { stage: 'deploy', label: '部署上线', icon: Rocket, desc: '部署 → 失败重试 → 汇报' },
   { stage: 'done', label: '完成', icon: CheckCircle, desc: '汇总结果 → 交付用户' },
 ];
@@ -41,7 +43,10 @@ const PipelineView: React.FC<PipelineViewProps> = ({ pipeline, onStageChange, on
             流水线监控
           </h2>
           <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
-            {pipeline.paused ? '已暂停' : '运行中'} · 内容打回: {pipeline.contentRejectCount} · 代码打回: {pipeline.codeRejectCount}
+            {pipeline.paused ? '已暂停' : pipeline.isRunning ? '运行中' : '空闲'} ·{' '}
+            难度：{pipeline.difficulty ? `${pipeline.difficulty}` : '未评估'} ·{' '}
+            内容打回: {pipeline.contentRejectCount} · 代码打回: {pipeline.codeRejectCount} ·{' '}
+            审查框架: {pipeline.reviewAuditCount} 次
           </span>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>

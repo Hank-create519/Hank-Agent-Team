@@ -3,6 +3,8 @@ import Sidebar from './ui/components/Sidebar';
 import Dashboard from './ui/pages/Dashboard';
 import PipelineView from './ui/pages/PipelineView';
 import AgentsPanel from './ui/pages/AgentsPanel';
+import ReviewDetail from './ui/pages/ReviewDetail';
+import MonitorPage from './ui/pages/MonitorPage';
 import { PipelineState, PipelineStage, ModelConfig, Agent } from './core/types';
 import {
   createInitialState,
@@ -15,85 +17,112 @@ import {
   updateAgent,
 } from './core/Pipeline';
 import { subscribe, getState, syncFromApp, startPipeline, pause, resume, stop } from './core/Engine';
+import { useAppStore, subscribeConfigSync } from './store/appStore';
 
 // 引擎状态同步到 React state
 const useEngineState = () => {
   const [state, setState] = useState<PipelineState>(createInitialState());
 
   useEffect(() => {
-    // 初始化引擎
-    syncFromApp(state);
+    // 启动时从持久化 store 加载配置到引擎
+    const { agents, models } = useAppStore.getState();
+    syncFromApp({ ...state, agents, models });
 
     // 订阅引擎状态变更
     const unsubscribe = subscribe(() => {
       setState(getState());
     });
 
-    return () => unsubscribe();
+    // 订阅 store 变化，自动同步给 Engine
+    const unsubStore = subscribeConfigSync((agents, models) => syncFromApp({ ...getState(), agents, models }));
+
+    return () => { unsubscribe(); unsubStore(); };
   }, []);
 
   return state;
 };
 
-type Page = 'dashboard' | 'pipeline' | 'agents';
+type Page = 'dashboard' | 'pipeline' | 'review' | 'monitor' | 'agents';
 
 const App: React.FC = () => {
   const [page, setPage] = useState<Page>('dashboard');
   const pipeline = useEngineState();
 
-  const setStage = useCallback((stage: PipelineStage, progress: number) => {
-    // 不再直接改 state，由 Engine 驱动
-  }, []);
+  const navigate = useCallback((p: string) => setPage(p as Page), []);
 
   const togglePause = useCallback(() => {
-    if (pipeline.paused) {
-      resume();
-    } else {
-      pause();
-    }
+    if (pipeline.paused) resume();
+    else pause();
   }, [pipeline.paused]);
 
+  // ===== 团队配置操作（同步到 store + engine） =====
   const handleSwitchModel = useCallback((agentId: string, modelId: string) => {
-    // 更新 agents 和 models 后同步给 Engine
-    const newState = { ...pipeline, agents: switchAgentModel(pipeline.agents, agentId, modelId) };
-    syncFromApp(newState);
-  }, [pipeline]);
+    useAppStore.getState().switchAgentModel(agentId, modelId);
+    const { agents } = useAppStore.getState();
+    syncFromApp({ ...getState(), agents, models: pipeline.models });
+  }, [pipeline.models]);
 
   const handleAddModel = useCallback((config: ModelConfig) => {
-    const newState = { ...pipeline, models: addModel(pipeline.models, config) };
-    syncFromApp(newState);
-  }, [pipeline]);
+    useAppStore.getState().addModel(config);
+    const { models } = useAppStore.getState();
+    syncFromApp({ ...getState(), agents: pipeline.agents, models });
+  }, [pipeline.agents]);
 
   const handleRemoveModel = useCallback((modelId: string) => {
     const inUse = pipeline.agents.some(a => a.model === modelId);
     if (inUse) return;
-    const newState = { ...pipeline, models: removeModel(pipeline.models, modelId) };
-    syncFromApp(newState);
-  }, [pipeline]);
+    useAppStore.getState().removeModel(modelId);
+    const { models } = useAppStore.getState();
+    syncFromApp({ ...getState(), agents: pipeline.agents, models });
+  }, [pipeline.agents]);
 
   const handleUpdateModel = useCallback((modelId: string, updates: Partial<ModelConfig>) => {
-    const newState = { ...pipeline, models: updateModel(pipeline.models, modelId, updates) };
-    syncFromApp(newState);
-  }, [pipeline]);
+    useAppStore.getState().updateModel(modelId, updates);
+    const { models } = useAppStore.getState();
+    syncFromApp({ ...getState(), agents: pipeline.agents, models });
+  }, [pipeline.agents]);
 
   const handleAddAgent = useCallback((agent: Agent) => {
-    const newState = { ...pipeline, agents: addAgent(pipeline.agents, agent) };
-    syncFromApp(newState);
-  }, [pipeline]);
+    useAppStore.getState().addAgent(agent);
+    const { agents } = useAppStore.getState();
+    syncFromApp({ ...getState(), agents, models: pipeline.models });
+  }, [pipeline.models]);
 
   const handleRemoveAgent = useCallback((agentId: string) => {
-    const newState = { ...pipeline, agents: removeAgent(pipeline.agents, agentId) };
-    syncFromApp(newState);
-  }, [pipeline]);
+    useAppStore.getState().removeAgent(agentId);
+    const { agents } = useAppStore.getState();
+    syncFromApp({ ...getState(), agents, models: pipeline.models });
+  }, [pipeline.models]);
 
   const handleUpdateAgent = useCallback((agentId: string, updates: Partial<Agent>) => {
-    const newState = { ...pipeline, agents: updateAgent(pipeline.agents, agentId, updates) };
-    syncFromApp(newState);
-  }, [pipeline]);
+    useAppStore.getState().updateAgent(agentId, updates);
+    const { agents } = useAppStore.getState();
+    syncFromApp({ ...getState(), agents, models: pipeline.models });
+  }, [pipeline.models]);
 
-  // 启动流水线
   const handleStartPipeline = (userInput: string) => {
     if (!userInput.trim()) return;
+    // 任务结束后存历史
+    const origUnsub = subscribe(() => {
+      const s = getState();
+      if (!s.isRunning && s.taskId && s.stage === 'done') {
+        useAppStore.getState().addHistory({
+          taskId: s.taskId,
+          userInput: s.userInput,
+          difficulty: s.difficulty,
+          reviewAuditCount: s.reviewAuditCount,
+          contentRejectCount: s.contentRejectCount,
+          codeRejectCount: s.codeRejectCount,
+          success: s.errors.length === 0,
+          createdAt: new Date().toISOString(),
+          summary: s.stageOutputs.done?.summary || '任务完成',
+        });
+        origUnsub();
+      }
+      if (!getState().isRunning && getState().errors.length > 0 && getState().taskId) {
+        origUnsub();
+      }
+    });
     startPipeline(userInput);
   };
 
@@ -107,10 +136,10 @@ const App: React.FC = () => {
           right: 0,
           height: 38,
           zIndex: 100,
-          WebkitAppRegion: 'drag',
+          ...({ WebkitAppRegion: 'drag' } as React.CSSProperties),
         }}
       />
-      <Sidebar currentPage={page} onNavigate={setPage} pipeline={pipeline} />
+      <Sidebar currentPage={page} onNavigate={navigate} pipeline={pipeline} />
       <main
         style={{
           flex: 1,
@@ -121,10 +150,12 @@ const App: React.FC = () => {
           zIndex: 1,
         }}
       >
-        {page === 'dashboard' && <Dashboard pipeline={pipeline} onNavigate={setPage} onStartPipeline={handleStartPipeline} />}
+        {page === 'dashboard' && <Dashboard pipeline={pipeline} onNavigate={navigate} onStartPipeline={handleStartPipeline} />}
         {page === 'pipeline' && (
-          <PipelineView pipeline={pipeline} onStageChange={setStage} onTogglePause={togglePause} />
+          <PipelineView pipeline={pipeline} onStageChange={() => {}} onTogglePause={togglePause} />
         )}
+        {page === 'review' && <ReviewDetail pipeline={pipeline} />}
+        {page === 'monitor' && <MonitorPage pipeline={pipeline} />}
         {page === 'agents' && (
           <AgentsPanel
             pipeline={pipeline}

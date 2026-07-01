@@ -681,7 +681,7 @@ const AgentsPanel: React.FC<AgentsPanelProps> = ({
                   const defaultModel = models.find(m => m.provider === '腾讯混元')?.id || models[0]?.id || '';
                   onAddAgent({
                     id,
-                    name: `${dept === 'command' ? '指挥' : dept === 'info' ? '信息' : dept === 'develop' ? '开发' : '审核'}${nextId - 1}`,
+                    name: `${dept === 'command' ? '指挥' : dept === 'info' ? '信息' : dept === 'develop' ? '开发' : '审核'}${nextIdRef.current - 1}`,
                     department: dept,
                     model: defaultModel,
                     apiKey: '',
