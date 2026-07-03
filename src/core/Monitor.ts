@@ -6,8 +6,8 @@
 //   - 中途干预（暂停/恢复/补充需求）
 // ============================================================
 
-import type { PipelineState, Department, MonitorEvent } from '../core/types';
-import { queryDepartment } from '../core/Engine';
+import type { PipelineState, Department, MonitorEvent } from './types';
+import { queryDepartment } from './Engine';
 
 // 部门中文描述
 const DEPT_DESC: Record<Department, { name: string; desc: string }> = {

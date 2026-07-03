@@ -179,6 +179,7 @@ export interface PipelineState {
   reviewFramework: ReviewFrameworkState | null;
   monitorEvents: MonitorEvent[];
   reviewAuditCount: number;        // 审查框架已执行次数
+  chatMessages?: ChatMessage[];    // 对话面板消息（ChatPanel 专用）
 }
 
 // 单阶段产出存档
@@ -194,6 +195,16 @@ export interface StageOutput {
   timestamp: string;
 }
 
+// 对话面板消息（ChatPanel）
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  name: string;
+  content: string;
+  timestamp: number;
+  action?: { type: string };
+}
+
 // 日志
 export interface LogEntry {
   time: string;
@@ -201,7 +212,7 @@ export interface LogEntry {
   agentName?: string;
   department: Department;
   message: string;
-  type: 'info' | 'success' | 'warning' | 'error';
+  type: 'info' | 'success' | 'warning' | 'error' | 'dept_message';
 }
 
 // 指挥部方案

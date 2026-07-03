@@ -32,7 +32,12 @@ interface AppStore {
   // ===== 任务历史（持久化最近 50 条摘要） =====
   history: HistoryItem[];
   addHistory: (item: HistoryItem) => void;
+  updateHistory: (taskId: string, patch: Partial<HistoryItem>) => void;
   clearHistory: () => void;
+
+  // ===== Fixes 状态 (P0-3) =====
+  taskFixes: Record<string, Record<string, 'accepted' | 'dismissed'>>;
+  setFixStatus: (taskId: string, issueIndex: number, status: 'accepted' | 'dismissed') => void;
 
   // ===== UI 状态（不持久化的运行时状态走 Engine） =====
   sidebarCollapsed: boolean;
@@ -49,6 +54,11 @@ export interface HistoryItem {
   success: boolean;
   createdAt: string;
   summary: string;
+  reviewReport?: any;
+  verdict?: string;
+  issues?: Array<{ severity: string; desc: string; fixSuggestion?: string }>;
+  suggestions?: string[];
+  pros?: string[];
 }
 
 export const useAppStore = create<AppStore>()(
@@ -106,7 +116,26 @@ export const useAppStore = create<AppStore>()(
         set((s) => ({
           history: [item, ...s.history].slice(0, 50),
         })),
+      updateHistory: (taskId, patch) =>
+        set((s) => ({
+          history: s.history.map((h) =>
+            h.taskId === taskId ? { ...h, ...patch } : h
+          ),
+        })),
       clearHistory: () => set({ history: [] }),
+
+      // Fixes 状态
+      taskFixes: {},
+      setFixStatus: (taskId, issueIndex, status) =>
+        set((s) => {
+          const current = s.taskFixes[taskId] || {};
+          return {
+            taskFixes: {
+              ...s.taskFixes,
+              [taskId]: { ...current, [String(issueIndex)]: status },
+            },
+          };
+        }),
 
       // UI
       sidebarCollapsed: false,
@@ -120,6 +149,7 @@ export const useAppStore = create<AppStore>()(
         agents: s.agents,
         models: s.models,
         history: s.history,
+        taskFixes: s.taskFixes,
       }),
     }
   )

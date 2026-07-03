@@ -44,6 +44,39 @@ const ModelRegistry: React.FC<{
   onUpdateAgent: (agentId: string, updates: Partial<Agent>) => void;
 }> = ({ models, agents, onAddModel, onRemoveModel, onUpdateAgent }) => {
   const agentsByModel = new Map<string, Agent[]>();
+  const [testStatus, setTestStatus] = useState<Record<string, 'testing' | 'ok' | 'fail' | null>>({});
+  const [testError, setTestError] = useState<Record<string, string>>({});
+
+  const handleTest = async (agent: Agent, model: ModelConfig) => {
+    setTestStatus((prev) => ({ ...prev, [agent.id]: 'testing' }));
+    try {
+      const baseUrl = agent.baseUrl || 'https://api.openai.com/v1';
+      const url = baseUrl.replace(/\/+$/, '') + '/chat/completions';
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${agent.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: model.id,
+          messages: [{ role: 'user', content: 'ping' }],
+          max_tokens: 1,
+        }),
+      });
+      if (res.ok) {
+        setTestStatus((prev) => ({ ...prev, [agent.id]: 'ok' }));
+      } else {
+        const text = await res.text();
+        setTestStatus((prev) => ({ ...prev, [agent.id]: 'fail' }));
+        setTestError((prev) => ({ ...prev, [agent.id]: text.slice(0, 200) }));
+      }
+    } catch (e: any) {
+      setTestStatus((prev) => ({ ...prev, [agent.id]: 'fail' }));
+      setTestError((prev) => ({ ...prev, [agent.id]: e.message || 'Network error' }));
+    }
+  };
+
   agents.forEach(a => {
     if (!agentsByModel.has(a.model)) agentsByModel.set(a.model, []);
     agentsByModel.get(a.model)!.push(a);
@@ -307,6 +340,27 @@ const ModelRegistry: React.FC<{
                                     style={{ width: '100%' }}
                                   />
                                 </div>
+                                <button
+                                  onClick={() => handleTest(agent, m)}
+                                  disabled={!agent.apiKey || testStatus[agent.id] === 'testing'}
+                                  title={testError[agent.id] || ''}
+                                  style={{
+                                    padding: '4px 10px',
+                                    borderRadius: 6,
+                                    border: '1px solid var(--border)',
+                                    background: testStatus[agent.id] === 'ok' ? 'rgba(34,197,94,0.15)' : testStatus[agent.id] === 'fail' ? 'rgba(239,68,68,0.15)' : 'transparent',
+                                    color: testStatus[agent.id] === 'ok' ? 'var(--accent-green)' : testStatus[agent.id] === 'fail' ? 'var(--accent-red)' : 'var(--accent)',
+                                    fontSize: 11,
+                                    cursor: agent.apiKey ? 'pointer' : 'not-allowed',
+                                    fontFamily: 'inherit',
+                                    flexShrink: 0,
+                                    minWidth: 44,
+                                  }}
+                                >
+                                  {testStatus[agent.id] === 'testing' ? (
+                                    <span style={{ display: 'inline-block', animation: 'spin 0.6s linear infinite' }}>⟳</span>
+                                  ) : testStatus[agent.id] === 'ok' ? '✓' : testStatus[agent.id] === 'fail' ? '✗' : '测试'}
+                                </button>
                                 <div style={{ flex: 1, maxWidth: 200 }}>
                                   <input
                                     placeholder="Base URL (可选)"
@@ -621,6 +675,74 @@ const AgentCard: React.FC<{
   );
 };
 
+// =========== 审查规则 Tab (P1-5) ===========
+const DEFAULT_AGENTS_RULES = `## Review Guidelines
+- Flag SQL injection vulnerabilities as P0 issues
+- Flag missing input validation as P1 issues
+- Flag hardcoded credentials as P0 issues
+- Don't log PII in error messages
+- Verify authentication middleware wraps every route`;
+
+const STORAGE_KEY = 'hank_agents_md_rules';
+
+const ReviewRulesTab: React.FC = () => {
+  const [rules, setRules] = useState(() => {
+    return localStorage.getItem(STORAGE_KEY) || DEFAULT_AGENTS_RULES;
+  });
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = () => {
+    localStorage.setItem(STORAGE_KEY, rules);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleReset = () => {
+    setRules(DEFAULT_AGENTS_RULES);
+    localStorage.setItem(STORAGE_KEY, DEFAULT_AGENTS_RULES);
+  };
+
+  return (
+    <div style={{ maxWidth: 800, margin: '0 auto' }}>
+      <div style={{ marginBottom: 16 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+          审查规则配置
+        </h3>
+        <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+          以 AGENTS.md 格式定义审查规则，引擎在执行审查时将读取这些规则。
+        </p>
+      </div>
+      <textarea
+        value={rules}
+        onChange={(e) => setRules(e.target.value)}
+        rows={16}
+        style={{
+          width: '100%', padding: '14px 16px', borderRadius: 8,
+          border: '1px solid var(--border)', background: 'var(--bg-input)',
+          color: 'var(--text-primary)', fontSize: 13, fontFamily: 'var(--font-mono)',
+          resize: 'vertical', lineHeight: 1.7, minHeight: 280,
+        }}
+      />
+      <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+        <button
+          onClick={handleSave}
+          className="btn btn-primary"
+          style={{ fontSize: 13, padding: '8px 20px' }}
+        >
+          {saved ? '已保存' : '保存'}
+        </button>
+        <button
+          onClick={handleReset}
+          className="btn btn-secondary"
+          style={{ fontSize: 13, padding: '8px 20px' }}
+        >
+          重置为默认
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // =========== 主页面 ===========
 const AgentsPanel: React.FC<AgentsPanelProps> = ({
   pipeline,
@@ -634,6 +756,7 @@ const AgentsPanel: React.FC<AgentsPanelProps> = ({
 }) => {
   const agents = pipeline.agents;
   const models = pipeline.models;
+  const [activeTab, setActiveTab] = useState<'agents' | 'rules'>('agents');
 
   const nextIdRef = useRef(1);
   const genId = (dept: Department) => {
@@ -644,24 +767,55 @@ const AgentsPanel: React.FC<AgentsPanelProps> = ({
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto' }}>
+      {/* Tab 导航 */}
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
           Agent 团队
         </h2>
-        <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
-          {agents.length} Agent · {models.length} 模型 · {agents.filter(a => a.role === 'leader').length} 队长 · {agents.filter(a => a.apiKey).length} Key 已配
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
+            {agents.length} Agent · {models.length} 模型 · {agents.filter(a => a.role === 'leader').length} 队长 · {agents.filter(a => a.apiKey).length} Key 已配
+          </span>
+          <div style={{ display: 'flex', gap: 4, background: 'var(--bg-input)', borderRadius: 8, padding: 3 }}>
+            {[
+              { id: 'agents' as const, label: '模型注册' },
+              { id: 'rules' as const, label: '审查规则' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: activeTab === tab.id ? 'var(--accent)' : 'transparent',
+                  color: activeTab === tab.id ? '#fff' : 'var(--text-secondary)',
+                  fontSize: 12,
+                  fontWeight: activeTab === tab.id ? 600 : 400,
+                  cursor: 'pointer',
+                  transition: 'all 150ms',
+                  fontFamily: 'inherit',
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <ModelRegistry
-        models={models}
-        agents={agents}
-        onAddModel={onAddModel}
-        onRemoveModel={onRemoveModel}
-        onUpdateAgent={onUpdateAgent}
-      />
-
-      {(['command', 'info', 'develop', 'review'] as Department[]).map(dept => {
+      {activeTab === 'rules' ? (
+        <ReviewRulesTab />
+      ) : (
+        <>
+          <ModelRegistry
+            models={models}
+            agents={agents}
+            onAddModel={onAddModel}
+            onRemoveModel={onRemoveModel}
+            onUpdateAgent={onUpdateAgent}
+          />
+          {(['command', 'info', 'develop', 'review'] as Department[]).map(dept => {
         const deptAgents = agents.filter(a => a.department === dept);
         const color = DEPT_COLORS[dept];
         const leader = deptAgents.find(a => a.role === 'leader');
@@ -729,6 +883,8 @@ const AgentsPanel: React.FC<AgentsPanelProps> = ({
           </div>
         );
       })}
+        </>
+      )}
     </div>
   );
 };

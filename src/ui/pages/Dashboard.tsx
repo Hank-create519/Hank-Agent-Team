@@ -2,11 +2,21 @@ import React, { useState } from 'react';
 import { PipelineState, Department } from '../../core/types';
 import { Activity, GitBranch, Users, Play, ShieldCheck, Box, Rocket, Gauge, Eye } from 'lucide-react';
 import { STAGE_PROGRESS_FULL } from '../../core/Pipeline';
+import ReviewTemplates from '../components/ReviewTemplates';
+import StatsPanel from '../components/StatsPanel';
+import GitPanel from '../components/GitPanel';
+import { useAppStore } from '../../store/appStore';
 
 interface DashboardProps {
   pipeline: PipelineState;
   onNavigate: (page: string) => void;
   onStartPipeline: (userInput: string) => void;
+  batchQueue?: Array<{
+    id: string;
+    userInput: string;
+    status: 'queued' | 'running' | 'done' | 'failed';
+  }>;
+  onStartBatch?: (inputs: string[]) => void;
 }
 
 const STAGE_LABELS: Record<string, { label: string; icon: React.ElementType }> = {
@@ -28,7 +38,7 @@ const DIFFICULTY_BADGE: Record<string, { label: string; color: string }> = {
   complex: { label: '复杂档 · 多轮深度审查', color: 'var(--accent-purple)' },
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ pipeline, onNavigate, onStartPipeline }) => {
+const Dashboard: React.FC<DashboardProps> = ({ pipeline, onNavigate, onStartPipeline, batchQueue = [], onStartBatch }) => {
   const activeAgents = pipeline.agents.filter(a => a.status === 'running').length;
   const idleAgents = pipeline.agents.filter(a => a.status === 'idle').length;
   const errorAgents = pipeline.agents.filter(a => a.status === 'error').length;
@@ -40,11 +50,22 @@ const Dashboard: React.FC<DashboardProps> = ({ pipeline, onNavigate, onStartPipe
 
   const [userInput, setUserInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isBatchMode, setIsBatchMode] = useState(false);
 
   const handleSubmit = async () => {
     if (!userInput.trim() || isSubmitting) return;
     setIsSubmitting(true);
-    onStartPipeline(userInput);
+    if (isBatchMode && onStartBatch) {
+      const lines = userInput.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length > 1) {
+        onStartBatch(lines);
+      } else {
+        onStartPipeline(userInput);
+      }
+    } else {
+      onStartPipeline(userInput);
+    }
+    setUserInput('');
     onNavigate('pipeline');
     setIsSubmitting(false);
   };
@@ -97,17 +118,25 @@ const Dashboard: React.FC<DashboardProps> = ({ pipeline, onNavigate, onStartPipe
           <div>
             <label htmlFor="user-input" style={{ display: 'block', fontSize: 14, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 12 }}>
               请描述你的需求
+              <span style={{ float: 'right', fontSize: 11, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <ReviewTemplates onSelectTemplate={(tpl) => setUserInput(tpl)} />
+                <GitPanel onStartReview={onStartPipeline} />
+                <label style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <input type="checkbox" checked={isBatchMode} onChange={(e) => setIsBatchMode(e.target.checked)} style={{ cursor: 'pointer' }} />
+                  批量模式（每行一个需求）
+                </label>
+              </span>
             </label>
             <textarea
               id="user-input"
               value={userInput}
               onChange={e => setUserInput(e.target.value)}
-              placeholder="例如：帮我设计一个支持多 Agent 协作的系统架构..."
-              rows={3}
+              placeholder={isBatchMode ? "每行输入一个审查需求...\n审查文件 A 的安全性\n审查文件 B 的性能\n审查文件 C 的代码规范" : "例如：帮我设计一个支持多 Agent 协作的系统架构..."}
+              rows={isBatchMode ? 5 : 3}
               style={{
                 width: '100%', padding: '14px 18px', borderRadius: 'var(--radius-sm)',
                 border: '1px solid var(--border)', background: 'var(--bg-card)',
-                color: 'var(--text-primary)', fontSize: 14, resize: 'vertical', minHeight: 120,
+                color: 'var(--text-primary)', fontSize: 14, resize: 'vertical', minHeight: isBatchMode ? 140 : 120,
               }}
             />
           </div>
@@ -189,6 +218,56 @@ const Dashboard: React.FC<DashboardProps> = ({ pipeline, onNavigate, onStartPipe
           );
         })}
       </div>
+
+      {/* P0-4: Batch Queue */}
+      {batchQueue.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div className="glass-card" style={{ padding: 20 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Activity size={16} color="var(--accent)" />
+              审查队列（{batchQueue.filter(b => b.status === 'done').length}/{batchQueue.length}）
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {batchQueue.map((item, i) => {
+                const statusColors: Record<string, string> = {
+                  queued: 'var(--text-tertiary)',
+                  running: 'var(--accent)',
+                  done: 'var(--accent-green)',
+                  failed: 'var(--accent-red)',
+                };
+                const statusLabels: Record<string, string> = {
+                  queued: '排队中',
+                  running: '执行中',
+                  done: '已完成',
+                  failed: '失败',
+                };
+                return (
+                  <div key={item.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 12px', borderRadius: 6,
+                    background: 'rgba(255,255,255,0.02)', fontSize: 13,
+                  }}>
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: 11, width: 24 }}>#{i + 1}</span>
+                    <span style={{ color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.userInput.length > 60 ? item.userInput.slice(0, 60) + '...' : item.userInput}
+                    </span>
+                    <span style={{
+                      padding: '2px 8px', borderRadius: 4,
+                      background: `${statusColors[item.status]}15`,
+                      color: statusColors[item.status], fontSize: 11, fontWeight: 600,
+                      flexShrink: 0,
+                    }}>
+                      {item.status === 'running' && <span style={{ animation: 'dot-pulse 1.4s var(--spring) infinite' }}>● </span>}
+                      {statusLabels[item.status]}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+      <StatsPanel history={useAppStore((s) => s.history)} />
     </div>
   );
 };

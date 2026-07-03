@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PipelineState, Department } from '../../core/types';
 import { Activity, Send, Radio } from 'lucide-react';
-import { askDepartment, getProgressReport, getInterventionPoints, DEPT_DESC } from '../../monitor/Monitor';
+import { askDepartment, getProgressReport, getInterventionPoints, DEPT_DESC } from '../../core/Monitor';
 
 interface MonitorPageProps {
   pipeline: PipelineState;
@@ -174,6 +174,63 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ pipeline }) => {
                 <span style={{ color: 'var(--text-secondary)', flex: 1 }}>{evt.content}</span>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* P2-11: Agent 对话流 */}
+      <div className="glass-card" style={{ padding: 18, marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <Send size={16} color="var(--accent-green)" />
+          <h3 style={{ fontSize: 14, fontWeight: 600 }}>对话流</h3>
+        </div>
+        {pipeline.messages && pipeline.messages.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {pipeline.messages.map((msg, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  background: 'rgba(0,0,0,0.2)',
+                  fontSize: 12,
+                }}
+              >
+                <span style={{
+                  padding: '2px 6px', borderRadius: 4, flexShrink: 0,
+                  background: 'rgba(16,163,127,0.15)', color: 'var(--accent)',
+                  fontSize: 10, fontWeight: 600,
+                }}>
+                  {new Date(msg.time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+                <span style={{ color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>
+                  {msg.agentName || msg.agentId}
+                </span>
+                <span style={{ color: 'var(--text-tertiary)', flexShrink: 0 }}>{msg.department}</span>
+                {msg.type === 'dept_message' && (
+                  <>
+                    <span style={{ color: 'var(--text-tertiary)' }}>→</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>{msg.message}</span>
+                  </>
+                )}
+                {msg.type !== 'dept_message' && (
+                  <span style={{
+                    padding: '1px 6px', borderRadius: 4,
+                    background: `var(--bg-card-hover)`, color: 'var(--text-tertiary)',
+                    fontSize: 10,
+                  }}>
+                    {msg.type}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: 'var(--text-tertiary)', padding: '16px 0', textAlign: 'center' }}>
+            暂无对话记录
           </div>
         )}
       </div>

@@ -715,3 +715,10 @@ export class ReviewEngine {
 
 // 默认单例
 export const engine = new ReviewEngine();
+
+// 对话面板消息发送（ChatPanel）
+export async function sendChatMessage(message: string): Promise<void> {
+  // ChatPanel integration — placeholder
+  // In a full implementation, this would post to the pipeline's message bus.
+  console.log('[ChatPanel]', message);
+}

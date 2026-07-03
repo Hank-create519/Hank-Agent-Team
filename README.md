@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="build/app_final.png" alt="Hank Agent Team" width="800" />
+<img src="docs/screenshots/app_final.png" alt="Hank Agent Team" width="800" />
 
 # Hank Agent Team
 
@@ -43,8 +43,8 @@ Hank Agent Team 是一个桌面端 AI 团队模拟器——你把需求扔进去
 ## 界面预览
 
 <div align="center">
-  <img src="build/app_final.png" alt="主界面" width="400" />
-  <img src="build/app_review.png" alt="审查面板" width="400" />
+  <img src="docs/screenshots/app_final.png" alt="主界面" width="400" />
+  <img src="docs/screenshots/app_review.png" alt="审查面板" width="400" />
 </div>
 
 ---
