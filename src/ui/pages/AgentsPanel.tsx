@@ -607,10 +607,35 @@ const AgentCard: React.FC<{
         />
       </div>
 
+      {/* Assigned Skills (P1-5: 指挥 Agent 动态分配，只读) */}
+      {agent.assignedSkills && agent.assignedSkills.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 6, fontWeight: 500 }}>
+            Assigned Skills（动态分配，只读）
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+            {agent.assignedSkills.map(s => (
+              <span
+                key={s}
+                style={{
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  background: 'rgba(64,192,87,0.12)',
+                  color: '#40c057',
+                  fontSize: 11,
+                }}
+              >
+                {s}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 技能 */}
       <div>
         <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 6, fontWeight: 500 }}>
-          Skills
+          Skills（手动覆盖）
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
           {agent.skills.map(s => (

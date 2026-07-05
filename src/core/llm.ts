@@ -13,7 +13,8 @@ export interface LLMResult {
   content: string;
   error?: string;
   elapsedMs: number;
-  mock: boolean; // 是否走了 mock
+  mock: boolean;      // 是否走了 mock
+  retryCount: number; // 实际重试次数（0 表示首次成功或未重试）
 }
 
 type Provider = 'openai' | 'anthropic' | 'google';
@@ -61,13 +62,42 @@ function fetchWithTimeout(url: string, init: RequestInit, timeout: number): Prom
   return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
+// ============ 重试退避包装 ============
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000;
+
+async function fetchWithRetry(
+  fn: () => Promise<Response>,
+  retries = MAX_RETRIES,
+): Promise<{ response: Response; retryCount: number }> {
+  let retryCount = 0;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const res = await fn();
+      if ((res.status === 429 || res.status >= 500) && i < retries) {
+        retryCount++;
+        const delay = BASE_DELAY_MS * Math.pow(2, i) + Math.random() * 1000;
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      return { response: res, retryCount };
+    } catch (e) {
+      if (i === retries) throw e;
+      retryCount++;
+      const delay = BASE_DELAY_MS * Math.pow(2, i) + Math.random() * 500;
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw new Error('fetchWithRetry 耗尽');
+}
+
 // ============ OpenAI 兼容协议 ============
 async function callOpenAICompat(
   baseUrl: string, apiKey: string, model: string,
   systemPrompt: string, userPrompt: string,
-): Promise<string> {
+): Promise<{ content: string; retryCount: number }> {
   const url = `${baseUrl}/chat/completions`;
-  const res = await fetchWithTimeout(url, {
+  const { response: res, retryCount } = await fetchWithRetry(() => fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
@@ -79,23 +109,23 @@ async function callOpenAICompat(
       temperature: 0.4,
       max_tokens: 4096,
     }),
-  }, TIMEOUT_MS);
+  }, TIMEOUT_MS));
 
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
   }
   const json = await res.json();
-  return json.choices?.[0]?.message?.content || '';
+  return { content: json.choices?.[0]?.message?.content || '', retryCount };
 }
 
 // ============ Anthropic 协议 ============
 async function callAnthropic(
   baseUrl: string, apiKey: string, model: string,
   systemPrompt: string, userPrompt: string,
-): Promise<string> {
+): Promise<{ content: string; retryCount: number }> {
   const url = `${baseUrl}/messages`;
-  const res = await fetchWithTimeout(url, {
+  const { response: res, retryCount } = await fetchWithRetry(() => fetchWithTimeout(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -109,23 +139,23 @@ async function callAnthropic(
       max_tokens: 4096,
       temperature: 0.4,
     }),
-  }, TIMEOUT_MS);
+  }, TIMEOUT_MS));
 
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
   }
   const json = await res.json();
-  return json.content?.[0]?.text || '';
+  return { content: json.content?.[0]?.text || '', retryCount };
 }
 
 // ============ Google 协议 ============
 async function callGoogle(
   baseUrl: string, apiKey: string, model: string,
   systemPrompt: string, userPrompt: string,
-): Promise<string> {
+): Promise<{ content: string; retryCount: number }> {
   const url = `${baseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const res = await fetchWithTimeout(url, {
+  const { response: res, retryCount } = await fetchWithRetry(() => fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -133,14 +163,14 @@ async function callGoogle(
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
     }),
-  }, TIMEOUT_MS);
+  }, TIMEOUT_MS));
 
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
   }
   const json = await res.json();
-  return json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return { content: json.candidates?.[0]?.content?.parts?.[0]?.text || '', retryCount };
 }
 
 // ============ Function Calling 工具循环 ============
@@ -240,6 +270,7 @@ export async function callAIWithTools(
       content: mockResponse(stage, userPrompt),
       elapsedMs: Date.now() - start,
       mock: true,
+      retryCount: 0,
     };
   }
 
@@ -271,7 +302,7 @@ export async function callAIWithTools(
           const finalContent = await rawChatCompletion(
             provider, baseUrl, agent.apiKey, agent.model, localMessages, controller.signal,
           );
-          return { content: finalContent || '[工具循环耗尽]', elapsedMs: Date.now() - start, mock: false };
+          return { content: finalContent || '[工具循环耗尽]', elapsedMs: Date.now() - start, mock: false, retryCount: 0 };
         }
       }
 
@@ -282,14 +313,13 @@ export async function callAIWithTools(
       // 解析响应：可能是文本或 tool_calls
       // rawChatCompletion 返回 JSON 字符串时需要解析
       if (!rawContent) {
-        return { content: '[空响应]', elapsedMs: Date.now() - start, mock: false };
+        return { content: '[空响应]', elapsedMs: Date.now() - start, mock: false, retryCount: 0 };
       }
 
       // 尝试解析为 tool_calls JSON
       let hasToolCalls = false;
-      try {
-        const parsed = JSON.parse(rawContent);
-        if (parsed.tool_calls && Array.isArray(parsed.tool_calls)) {
+      const { value: parsed, success } = safeJsonParse<{ tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }> }>(rawContent, {});
+      if (success && parsed.tool_calls && Array.isArray(parsed.tool_calls)) {
           hasToolCalls = true;
           localMessages.push({
             role: 'assistant',
@@ -325,16 +355,14 @@ export async function callAIWithTools(
           }
           continue;
         }
-      } catch {
-        // 不是 JSON，是普通文本，直接返回
-      }
+
 
       if (!hasToolCalls) {
-        return { content: rawContent, elapsedMs: Date.now() - start, mock: false };
+        return { content: rawContent, elapsedMs: Date.now() - start, mock: false, retryCount: 0 };
       }
     }
 
-    return { content: '[工具循环耗尽]', elapsedMs: Date.now() - start, mock: false };
+    return { content: '[工具循环耗尽]', elapsedMs: Date.now() - start, mock: false, retryCount: 0 };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return {
@@ -342,6 +370,7 @@ export async function callAIWithTools(
       error: `工具循环失败已降级 mock：${msg}`,
       elapsedMs: Date.now() - start,
       mock: true,
+      retryCount: 0,
     };
   }
 }
@@ -477,6 +506,7 @@ export async function callLLM(
       content: mockResponse(stage, userPrompt),
       elapsedMs: Date.now() - start,
       mock: true,
+      retryCount: 0,
     };
   }
 
@@ -488,17 +518,24 @@ export async function callLLM(
     const systemPrompt = agent.systemPrompt || '你是 Hank Agent Team 的一员，请按要求完成任务。';
 
     let content: string;
+    let retryCount = 0;
     if (provider === 'anthropic') {
-      content = await callAnthropic(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt);
+      const result = await callAnthropic(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt);
+      content = result.content;
+      retryCount = result.retryCount;
     } else if (provider === 'google') {
-      content = await callGoogle(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt);
+      const result = await callGoogle(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt);
+      content = result.content;
+      retryCount = result.retryCount;
     } else {
-      content = await callOpenAICompat(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt);
+      const result = await callOpenAICompat(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt);
+      content = result.content;
+      retryCount = result.retryCount;
     }
 
-    return { content: content || '[空响应]', elapsedMs: Date.now() - start, mock: false };
+    return { content: content || '[空响应]', elapsedMs: Date.now() - start, mock: false, retryCount };
   } catch (e: unknown) {
-    // 真实调用失败 → fallback 到 mock，保证流程不中断
+    // 真实调用失败（重试耗尽或不可重试错误） → fallback 到 mock，保证流程不中断
     const msg = e instanceof Error ? e.message : String(e);
     await delay(300);
     return {
@@ -506,10 +543,31 @@ export async function callLLM(
       error: `真实调用失败已降级 mock：${msg}`,
       elapsedMs: Date.now() - start,
       mock: true,
+      retryCount: 0,
     };
   }
 }
 
 function delay(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
+}
+
+// ============ JSON 容错解析 ============
+/**
+ * 安全 JSON 解析 — 剥离 Markdown 代码块包裹、修复尾部逗号
+ * 失败时不抛异常，返回 fallback 并 console.warn
+ */
+export function safeJsonParse<T>(raw: string, fallback: T): { value: T; success: boolean } {
+  let cleaned = raw.trim();
+  // 剥离 ```json ... ``` 包裹
+  const codeBlock = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (codeBlock) cleaned = codeBlock[1].trim();
+  // 修复尾部逗号
+  cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+  try {
+    return { value: JSON.parse(cleaned) as T, success: true };
+  } catch {
+    console.warn('[safeJsonParse] 解析失败, 原始片段:', cleaned.slice(0, 200));
+    return { value: fallback, success: false };
+  }
 }

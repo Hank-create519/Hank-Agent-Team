@@ -16,7 +16,10 @@ export interface Agent {
   status: AgentStatus;
   currentTask: string;
   systemPrompt: string;
+  /** 静态技能标签列表，由 Skill Registry (P1-3) 消费注入 system prompt；动态分配结果见 assignedSkills (P1-5) */
   skills: string[];
+  /** 指挥 Agent 根据任务动态分配的技能 ID 列表 (P1-5)，优先级高于 skills */
+  assignedSkills?: string[];
   stats: { tasksCompleted: number; errors: number; avgTime: number };
 }
 
@@ -110,6 +113,19 @@ export interface IssueItem {
   desc: string;
 }
 
+// ============ Skill Registry (P1-3) ============
+export interface SkillDefinition {
+  id: string;
+  name: string;
+  description: string;       // 供 LLM 理解用途
+  parameters?: {             // JSON Schema 参数定义
+    type: 'object';
+    properties: Record<string, { type: string; description: string }>;
+    required?: string[];
+  };
+  systemPromptSnippet: string; // 激活时注入的 system prompt 片段
+}
+
 // 审查框架完整状态
 export interface ReviewFrameworkState {
   phase: ReviewPhase;
@@ -148,7 +164,7 @@ export interface DifficultyAssessment {
 export interface MonitorEvent {
   id: string;
   time: string;
-  type: 'dept_message' | 'review_opinion' | 'difficulty_assess' | 'framework_phase' | 'user_intervention';
+  type: 'dept_message' | 'review_opinion' | 'difficulty_assess' | 'framework_phase' | 'user_intervention' | 'retry_attempt' | 'context_truncated' | 'plan_validation';
   department: Department;
   agentName: string;
   content: string;
@@ -218,6 +234,7 @@ export interface LogEntry {
 // 指挥部方案
 export interface Plan {
   summary: string;
+  /** 暂未消费，待 ConstitutionGuard (P1-2) 作为动态流水线的执行来源 */
   steps: PipelineStage[];
   risks: string[];
   suggestedApproach: string;

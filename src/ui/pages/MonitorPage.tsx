@@ -155,12 +155,33 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ pipeline }) => {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 400, overflowY: 'auto' }}>
-            {pipeline.monitorEvents.slice().reverse().map((evt) => (
+            {pipeline.monitorEvents.slice().reverse().map((evt) => {
+              // P1-4: 事件类型 → 图标/颜色映射
+              const typeMeta: Record<string, { icon: string; color: string }> = {
+                dept_message: { icon: '→', color: 'var(--accent)' },
+                review_opinion: { icon: '★', color: 'var(--accent-orange)' },
+                difficulty_assess: { icon: '§', color: 'var(--accent-green)' },
+                framework_phase: { icon: '⊗', color: 'var(--accent-purple, #a78bfa)' },
+                user_intervention: { icon: '?', color: '#f59e0b' },
+                retry_attempt: { icon: '↺', color: '#fbbf24' },
+                context_truncated: { icon: '⊘', color: '#ef4444' },
+                plan_validation: { icon: '✓', color: '#22c55e' },
+              };
+              const meta = typeMeta[evt.type] || { icon: '·', color: 'var(--text-tertiary)' };
+              return (
               <div key={evt.id} style={{
                 display: 'flex', gap: 10, alignItems: 'flex-start',
                 padding: '8px 12px', borderRadius: 8,
                 background: 'rgba(0,0,0,0.2)', fontSize: 12,
               }}>
+                <span style={{
+                  padding: '2px 4px', borderRadius: 4, flexShrink: 0,
+                  background: 'var(--bg-card-hover)', color: meta.color,
+                  fontSize: 10, fontWeight: 700,
+                  title: evt.type,
+                }}>
+                  {meta.icon}
+                </span>
                 <span style={{
                   padding: '2px 6px', borderRadius: 4, flexShrink: 0,
                   background: 'var(--bg-card-hover)', color: 'var(--text-tertiary)',
@@ -173,7 +194,8 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ pipeline }) => {
                 </span>
                 <span style={{ color: 'var(--text-secondary)', flex: 1 }}>{evt.content}</span>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

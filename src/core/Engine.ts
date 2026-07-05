@@ -19,6 +19,9 @@ import {
 } from './Pipeline';
 import { bus } from './Communication';
 import { callLLM } from './llm';
+import { safeJsonParse } from './llm';
+import { getSkills } from './skillRegistry';
+import { listSkills } from './skillRegistry';
 import { mockSummary } from './mockResponses';
 import { clearSession } from './safetyGuard';
 import { assessDifficulty } from './difficultyRouter';
@@ -192,6 +195,17 @@ async function runStage(stage: PipelineStage, userPrompt: string, opts?: { force
   await waitIfPaused();
   if (aborted()) return '';
 
+  // 上下文窗口溢出保护：超出阈值时保留头部 + 尾部
+  const MAX_PROMPT_LEN = 32000; // 保守值，约 8000 tokens
+  let finalPrompt = userPrompt;
+  if (userPrompt.length > MAX_PROMPT_LEN) {
+    const head = userPrompt.slice(0, MAX_PROMPT_LEN * 2 / 3);
+    const tail = userPrompt.slice(-MAX_PROMPT_LEN / 3);
+    finalPrompt = head + '\n\n[中间内容已截断...]\n\n' + tail;
+    addLog(null, STAGE_DEPT[stage],
+      `[上下文截断] ${stage} 阶段输入从 ${userPrompt.length} 截断至 ${finalPrompt.length} 字符`, 'warning');
+  }
+
   const dept = STAGE_DEPT[stage];
   const agent = opts?.forceAgent || pickAgent(dept);
   if (!agent) throw new Error(`${DEPT_NAME[dept]} 没有可用 Agent`);
@@ -203,8 +217,32 @@ async function runStage(stage: PipelineStage, userPrompt: string, opts?: { force
   notify();
 
   const start = Date.now();
-  const result = await callLLM(agent, _state.models, stage, userPrompt);
+
+  // P1-3/P1-5: 注入 Skill system prompt 片段
+  let effectiveAgent = agent;
+  const activeSkillIds = agent.assignedSkills && agent.assignedSkills.length > 0
+    ? agent.assignedSkills   // P1-5 动态分配优先
+    : agent.skills;
+  const activeSkillDefs = getSkills(activeSkillIds);
+  if (activeSkillDefs.length > 0) {
+    const skillSnippets = activeSkillDefs
+      .map(s => s.systemPromptSnippet)
+      .join('\n\n');
+    effectiveAgent = {
+      ...agent,
+      systemPrompt: `${agent.systemPrompt}\n\n${skillSnippets}`,
+    };
+  }
+
+  const result = await callLLM(effectiveAgent, _state.models, stage, finalPrompt);
   const elapsedMs = Date.now() - start;
+
+  // P1-4: 记录重试事件
+  if (result.retryCount > 0) {
+    recordMonitorEvent('retry_attempt', dept, agent.name,
+      `LLM 调用经 ${result.retryCount} 次重试后成功（${stage} 阶段）`,
+      { retryCount: result.retryCount, stage });
+  }
 
   setAgentStatus(agent.id, 'done');
   const summary = extractSummary(stage, result.content);
@@ -223,6 +261,53 @@ function extractSummary(stage: PipelineStage, content: string): string {
   if (content.includes('【')) return mockSummary(stage);
   const firstLine = content.split('\n').find(l => l.trim() && !l.startsWith('#') && !l.startsWith('```'));
   return firstLine ? firstLine.trim().slice(0, 80) : mockSummary(stage);
+}
+
+// ============ ConstitutionGuard: 阶段依赖图谱与校验 ============
+const STAGE_DEPENDENCIES: Partial<Record<PipelineStage, PipelineStage[]>> = {
+  audit_entry: ['init'],
+  content_review: ['extract'],
+  code_review: ['develop'],
+  deep_audit: ['code_review'],
+  deploy: ['develop', 'code_review'],
+  done: ['deploy'],
+};
+
+function validatePlan(steps: PipelineStage[]): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  const seen = new Set<PipelineStage>();
+  for (const step of steps) {
+    const deps = STAGE_DEPENDENCIES[step];
+    if (deps) {
+      for (const dep of deps) {
+        if (!seen.has(dep)) {
+          errors.push(`阶段「${STAGE_LABELS[step]}」依赖「${STAGE_LABELS[dep]}」但后者未出现在计划中`);
+        }
+      }
+    }
+    seen.add(step);
+  }
+  const result = { valid: errors.length === 0, errors };
+  if (!result.valid) {
+    recordMonitorEvent('plan_validation', 'command', 'ConstitutionGuard',
+      `Plan.steps 校验失败：${errors.join('；')}`, { errors });
+  }
+  return result;
+}
+
+function buildPlanStepContext(userInput: string): string {
+  const parts: string[] = [`需求：${userInput}`];
+  if (_state.plan) {
+    parts.push(`\n方案摘要：${_state.plan.summary}`);
+  }
+  const prevStages: PipelineStage[] = ['init', 'audit_entry', 'extract', 'content_review', 'develop', 'code_review', 'deep_audit'];
+  for (const s of prevStages) {
+    const out = _state.stageOutputs[s];
+    if (out?.content) {
+      parts.push(`\n[${STAGE_LABELS[s]}] 产出：\n${out.content.slice(0, 3000)}`);
+    }
+  }
+  return parts.join('\n');
 }
 
 // ============ 审核打回判定 ============
@@ -415,10 +500,39 @@ export async function startPipeline(userInput: string) {
     // ========================================================
     // 第二步：方案精炼（中等/复杂档）
     // ========================================================
-    // init —— 指挥部制定方案
-    const initOutput = await runStage('init', `请针对以下需求制定协作方案：\n\n${userInput}`);
+    // P1-5: 注入 Skill Registry 供指挥 Agent 动态分配
+    const allSkills = listSkills();
+    const skillListStr = allSkills.map(s => `- ${s.id}: ${s.name} — ${s.description}`).join('\n');
+    const initPrompt = `请针对以下需求制定协作方案，并为各角色 Agent 分配最适合的技能：\n\n需求：${userInput}\n\n可用技能列表：\n${skillListStr}\n\n请输出 JSON，包含 plan 字段和 agents 字段。agents 为数组，每项包含 role（与 Agent role 对应：leader/member/reviewer_logic/reviewer_fact/reviewer_user）和 assignedSkills（可用技能 id 数组）。`;
+    const initOutput = await runStage('init', initPrompt);
     if (aborted()) return;
-    try { _state = { ..._state, plan: JSON.parse(initOutput) as Plan }; } catch { /* 非 JSON 也继续 */ }
+    {
+      const { value: fullOutput, success } = safeJsonParse<any>(initOutput, {});
+      if (success && fullOutput) {
+        const plan: Plan = {
+          summary: fullOutput.summary || '',
+          steps: fullOutput.steps || [],
+          risks: fullOutput.risks || [],
+          suggestedApproach: fullOutput.suggestedApproach || '',
+        };
+        _state = { ..._state, plan };
+        // P1-5: 解析 Agent Skill 动态分配
+        if (fullOutput.agents && Array.isArray(fullOutput.agents)) {
+          const assignments: Array<{ role: string; assignedSkills: string[] }> = fullOutput.agents;
+          _state = {
+            ..._state,
+            agents: _state.agents.map(a => {
+              const match = assignments.find(x => x.role === a.role);
+              return match ? { ...a, assignedSkills: match.assignedSkills } : a;
+            }),
+          };
+          addLog(pickAgent('command'), 'command',
+            `指挥 Agent 已为 ${assignments.length} 个角色动态分配技能`, 'info');
+        }
+      } else {
+        addLog(pickAgent('command'), 'command', '方案非标准 JSON，已降级为自由文本方案', 'warning');
+      }
+    }
     notify();
 
     // audit_entry —— 审查框架深度把关（方案级）
@@ -432,142 +546,223 @@ export async function startPipeline(userInput: string) {
       addLog(null, 'command', '审查框架驳回方案，指挥部重新制定', 'warning');
       notify();
       const revisedOutput = await runStage('init',
-        `审查框架驳回了上一版方案，请根据以下反馈重新制定：\n\n原始需求：${userInput}\n\n审查反馈：${formatReviewReport(_state.reviewFramework!.finalReport!)}`);
+        `审查框架驳回了上一版方案，请根据以下反馈重新制定：\n\n原始需求：${userInput}\n\n可用技能列表：\n${skillListStr}\n\n审查反馈：${formatReviewReport(_state.reviewFramework!.finalReport!)}`);
       if (aborted()) return;
-      try { _state = { ..._state, plan: JSON.parse(revisedOutput) as Plan }; } catch { /* */ }
+      const { value: fullOutput, success: revisedOk } = safeJsonParse<any>(revisedOutput, {});
+      if (revisedOk && fullOutput) {
+        const revisedPlan: Plan = {
+          summary: fullOutput.summary || '',
+          steps: fullOutput.steps || [],
+          risks: fullOutput.risks || [],
+          suggestedApproach: fullOutput.suggestedApproach || '',
+        };
+        _state = { ..._state, plan: revisedPlan };
+        if (fullOutput.agents && Array.isArray(fullOutput.agents)) {
+          const assignments: Array<{ role: string; assignedSkills: string[] }> = fullOutput.agents;
+          _state = {
+            ..._state,
+            agents: _state.agents.map(a => {
+              const match = assignments.find(x => x.role === a.role);
+              return match ? { ...a, assignedSkills: match.assignedSkills } : a;
+            }),
+          };
+        }
+      } else {
+        addLog(pickAgent('command'), 'command', '修订方案非标准 JSON，已降级为自由文本方案', 'warning');
+      }
       notify();
     }
 
     // ========================================================
-    // 第三步：三部门协同
+    // P1-2 ConstitutionGuard: 检查 plan.steps 是否可驱动动态流水线
     // ========================================================
-    // extract —— 信息部提取（带内容审核打回循环）
-    let contentApproved = false;
-    let extractAttempts = 0;
-    while (!contentApproved && extractAttempts < 3) {
-      if (aborted()) return;
-      extractAttempts++;
-      addMessage('command', 'info', 'task', '请提取关键信息');
-      const extractOutput = await runStage('extract',
-        `请从以下需求与方案中提取关键信息（标注信息来源和可信度）：\n\n需求：${userInput}\n\n方案：${initOutput}`);
-      if (aborted()) return;
+    const planSteps = _state.plan?.steps;
+    const { valid: planValid } = planSteps && planSteps.length > 0
+      ? validatePlan(planSteps)
+      : { valid: false };
 
-      addMessage('info', 'review', 'result', '信息提取完成，待内容审核');
-      const reviewOutput = await runStage('content_review', `请审核以下信息提取结果的准确性：\n\n${extractOutput}`);
-      if (aborted()) return;
+    if (planSteps && planSteps.length > 0 && planValid) {
+      // ---- 动态路径：按 plan.steps 遍历执行 ----
+      addLog(pickAgent('command'), 'command',
+        `ConstitutionGuard 通过，按指挥部方案动态流水线执行（${planSteps.length} 阶段）`, 'success');
+      recordMonitorEvent('plan_validation', 'command', 'ConstitutionGuard',
+        `动态流水线启用：${planSteps.join(' → ')}`, { steps: planSteps });
+      notify();
 
-      const { approved, issues } = parseReviewResult(reviewOutput);
-      if (approved) {
-        contentApproved = true;
-        addMessage('review', 'info', 'ack', '内容审核通过');
-      } else {
-        _state = { ..._state, contentRejectCount: _state.contentRejectCount + 1 };
-        addMessage('review', 'info', 'review', `内容审核打回：${issues.join('；')}`);
-        addLog(pickAgent('review'), 'review', `内容审核第 ${extractAttempts} 次打回`, 'warning');
-        notify();
-        if (_state.contentRejectCount >= 3) {
-          // 复杂档：内容多次打回 → 触发审查框架深度复审
-          if (_state.difficulty === 'complex') {
-            addLog(null, 'review', '内容审核打回超 3 次（复杂档），触发审查框架深度复审', 'warning');
+      for (const step of planSteps) {
+        if (aborted()) return;
+        // 跳过已执行的阶段
+        if (step === 'difficulty_assess' || step === 'init' || step === 'audit_entry') continue;
+
+        const ctx = buildPlanStepContext(userInput);
+
+        if (step === 'done') {
+          // done 阶段使用摘要汇总格式
+          const auditInfo = _state.reviewAuditCount > 0
+            ? `\n\n【本次任务已经过 ${_state.reviewAuditCount} 轮审查框架审核】`
+            : '';
+          const stageSummary = Object.entries(_state.stageOutputs)
+            .map(([s, o]) => `[${s}] ${o.summary}`)
+            .join('\n');
+          const summaryPrompt = `请汇总本次任务执行情况并交付：\n\n需求：${userInput}\n\n各阶段摘要：\n${stageSummary}${auditInfo}`;
+          await runStage('done', summaryPrompt);
+        } else if (step === 'deploy') {
+          // 部署带重试
+          let deploySuccess = false;
+          for (let attempt = 0; attempt < 2 && !deploySuccess; attempt++) {
+            if (aborted()) return;
+            if (attempt > 0) addLog(pickAgent('develop'), 'develop', '部署重试第 1 次', 'warning');
+            await runStage('deploy', `请执行部署。任务：${userInput}\n\n上下文：\n${ctx}`);
+            const deployOut = _state.stageOutputs.deploy?.content || '';
+            deploySuccess = /部署成功|✓ 部署成功|部署完成/i.test(deployOut);
+            if (!deploySuccess && attempt === 1) {
+              addLog(pickAgent('develop'), 'develop', '部署重试仍失败，暂停汇报', 'error');
+              _state = { ..._state, paused: true, errors: [..._state.errors, '部署失败'] };
+              notify();
+              await waitIfPaused();
+              if (aborted()) return;
+            }
+          }
+        } else {
+          await runStage(step, ctx);
+        }
+      }
+      addMessage('command', 'command', 'result', `动态流水线交付完成（${_state.reviewAuditCount} 轮审查框架审核）`);
+    } else {
+      // ---- 兜底路径：走原有 difficulty 硬编码分支 ----
+      if (planSteps && planSteps.length > 0 && !planValid) {
+        addLog(pickAgent('command'), 'command', 'Plan.steps 校验未通过，回退硬编码路径', 'warning');
+      }
+
+      // ========================================================
+      // 第三步：三部门协同
+      // ========================================================
+      // extract —— 信息部提取（带内容审核打回循环）
+      let contentApproved = false;
+      let extractAttempts = 0;
+      while (!contentApproved && extractAttempts < 3) {
+        if (aborted()) return;
+        extractAttempts++;
+        addMessage('command', 'info', 'task', '请提取关键信息');
+        const extractOutput = await runStage('extract',
+          `请从以下需求与方案中提取关键信息（标注信息来源和可信度）：\n\n需求：${userInput}\n\n方案：${initOutput}`);
+        if (aborted()) return;
+
+        addMessage('info', 'review', 'result', '信息提取完成，待内容审核');
+        const reviewOutput = await runStage('content_review', `请审核以下信息提取结果的准确性：\n\n${extractOutput}`);
+        if (aborted()) return;
+
+        const { approved, issues } = parseReviewResult(reviewOutput);
+        if (approved) {
+          contentApproved = true;
+          addMessage('review', 'info', 'ack', '内容审核通过');
+        } else {
+          _state = { ..._state, contentRejectCount: _state.contentRejectCount + 1 };
+          addMessage('review', 'info', 'review', `内容审核打回：${issues.join('；')}`);
+          addLog(pickAgent('review'), 'review', `内容审核第 ${extractAttempts} 次打回`, 'warning');
+          notify();
+          if (_state.contentRejectCount >= 3) {
+            if (_state.difficulty === 'complex') {
+              addLog(null, 'review', '内容审核打回超 3 次（复杂档），触发审查框架深度复审', 'warning');
+              notify();
+              await executeReviewFramework(extractOutput, 'plan', _abortController.signal);
+              if (aborted()) return;
+            }
+            addLog(pickAgent('command'), 'command', '内容审核打回超过 3 次，自动暂停', 'error');
+            _state = { ..._state, paused: true };
             notify();
-            await executeReviewFramework(extractOutput, 'plan', _abortController.signal);
+            await waitIfPaused();
             if (aborted()) return;
           }
-          addLog(pickAgent('command'), 'command', '内容审核打回超过 3 次，自动暂停', 'error');
-          _state = { ..._state, paused: true };
-          notify();
-          await waitIfPaused();
-          if (aborted()) return;
         }
       }
-    }
 
-    // ========================================================
-    // 第四步：双重审计防线
-    // ========================================================
-    // develop —— 开发部编码（带代码审核打回循环）
-    let codeApproved = false;
-    let devAttempts = 0;
-    while (!codeApproved && devAttempts < 3) {
-      if (aborted()) return;
-      devAttempts++;
-      addMessage('command', 'develop', 'task', '请编码实现');
-      const devOutput = await runStage('develop',
-        `请基于以下信息编码实现：\n\n需求：${userInput}\n\n信息：${_state.stageOutputs.extract?.content || ''}`);
-      if (aborted()) return;
+      // ========================================================
+      // 第四步：双重审计防线
+      // ========================================================
+      let codeApproved = false;
+      let devAttempts = 0;
+      while (!codeApproved && devAttempts < 3) {
+        if (aborted()) return;
+        devAttempts++;
+        addMessage('command', 'develop', 'task', '请编码实现');
+        const devOutput = await runStage('develop',
+          `请基于以下信息编码实现：\n\n需求：${userInput}\n\n信息：${_state.stageOutputs.extract?.content || ''}`);
+        if (aborted()) return;
 
-      // 第一道防线：部门级代码审核
-      addMessage('develop', 'review', 'result', '编码完成，待代码审核');
-      const codeReviewOutput = await runStage('code_review', `请审核以下代码：\n\n${devOutput}`);
-      if (aborted()) return;
+        addMessage('develop', 'review', 'result', '编码完成，待代码审核');
+        const codeReviewOutput = await runStage('code_review', `请审核以下代码：\n\n${devOutput}`);
+        if (aborted()) return;
 
-      const { approved, issues } = parseReviewResult(codeReviewOutput);
-      if (approved) {
-        codeApproved = true;
-        addMessage('review', 'develop', 'ack', '代码审核通过');
+        const { approved, issues } = parseReviewResult(codeReviewOutput);
+        if (approved) {
+          codeApproved = true;
+          addMessage('review', 'develop', 'ack', '代码审核通过');
 
-        // 第二道防线：复杂档 → 审查框架系统级兜底深度审计
-        if (_state.difficulty === 'complex') {
-          addLog(null, 'review', '复杂档：启动系统级深度审计（第二道防线）', 'info');
-          notify();
-          await executeReviewFramework(devOutput, 'code', _abortController.signal);
-          if (aborted()) return;
-
-          // 兜底审计驳回 → 视为代码审核不通过，重新开发
-          if (_state.reviewFramework?.finalReport?.verdict === 'reject') {
-            codeApproved = false;
-            addLog(null, 'review', '系统级深度审计驳回，打回开发部', 'warning');
-            _state = { ..._state, codeRejectCount: _state.codeRejectCount + 1 };
+          if (_state.difficulty === 'complex') {
+            addLog(null, 'review', '复杂档：启动系统级深度审计（第二道防线）', 'info');
             notify();
-          } else {
-            addLog(null, 'review', '系统级深度审计通过', 'success');
+            await executeReviewFramework(devOutput, 'code', _abortController.signal);
+            if (aborted()) return;
+
+            if (_state.reviewFramework?.finalReport?.verdict === 'reject') {
+              codeApproved = false;
+              addLog(null, 'review', '系统级深度审计驳回，打回开发部', 'warning');
+              _state = { ..._state, codeRejectCount: _state.codeRejectCount + 1 };
+              notify();
+            } else {
+              addLog(null, 'review', '系统级深度审计通过', 'success');
+            }
+          }
+        } else {
+          _state = { ..._state, codeRejectCount: _state.codeRejectCount + 1 };
+          addMessage('review', 'develop', 'review', `代码审核打回：${issues.join('；')}`);
+          addLog(pickAgent('review'), 'review', `代码审核第 ${devAttempts} 次打回`, 'warning');
+          notify();
+          if (_state.codeRejectCount >= 3) {
+            addLog(pickAgent('command'), 'command', '代码审核打回超过 3 次，自动暂停', 'error');
+            _state = { ..._state, paused: true };
+            notify();
+            await waitIfPaused();
+            if (aborted()) return;
           }
         }
-      } else {
-        _state = { ..._state, codeRejectCount: _state.codeRejectCount + 1 };
-        addMessage('review', 'develop', 'review', `代码审核打回：${issues.join('；')}`);
-        addLog(pickAgent('review'), 'review', `代码审核第 ${devAttempts} 次打回`, 'warning');
-        notify();
-        if (_state.codeRejectCount >= 3) {
-          addLog(pickAgent('command'), 'command', '代码审核打回超过 3 次，自动暂停', 'error');
-          _state = { ..._state, paused: true };
+      }
+
+      // ========================================================
+      // 第五步：终审与交付
+      // ========================================================
+      if (aborted()) return;
+      addMessage('command', 'develop', 'task', '请执行部署');
+      let deploySuccess = false;
+      for (let attempt = 0; attempt < 2 && !deploySuccess; attempt++) {
+        if (aborted()) return;
+        if (attempt > 0) addLog(pickAgent('develop'), 'develop', '部署重试第 1 次', 'warning');
+        await runStage('deploy', `请执行部署。任务：${userInput}\n\n代码：${_state.stageOutputs.develop?.content || ''}`);
+        const deployOut = _state.stageOutputs.deploy?.content || '';
+        deploySuccess = /部署成功|✓ 部署成功|部署完成/i.test(deployOut);
+        if (!deploySuccess && attempt === 1) {
+          addLog(pickAgent('develop'), 'develop', '部署重试仍失败，暂停汇报', 'error');
+          _state = { ..._state, paused: true, errors: [..._state.errors, '部署失败'] };
           notify();
           await waitIfPaused();
           if (aborted()) return;
         }
       }
-    }
+      addMessage('develop', 'command', 'result', deploySuccess ? '部署成功' : '部署失败');
 
-    // ========================================================
-    // 第五步：终审与交付
-    // ========================================================
-    if (aborted()) return;
-    addMessage('command', 'develop', 'task', '请执行部署');
-    let deploySuccess = false;
-    for (let attempt = 0; attempt < 2 && !deploySuccess; attempt++) {
+      // done
       if (aborted()) return;
-      if (attempt > 0) addLog(pickAgent('develop'), 'develop', '部署重试第 1 次', 'warning');
-      await runStage('deploy', `请执行部署。任务：${userInput}\n\n代码：${_state.stageOutputs.develop?.content || ''}`);
-      const deployOut = _state.stageOutputs.deploy?.content || '';
-      deploySuccess = /部署成功|✓ 部署成功|部署完成/i.test(deployOut);
-      if (!deploySuccess && attempt === 1) {
-        addLog(pickAgent('develop'), 'develop', '部署重试仍失败，暂停汇报', 'error');
-        _state = { ..._state, paused: true, errors: [..._state.errors, '部署失败'] };
-        notify();
-        await waitIfPaused();
-        if (aborted()) return;
-      }
+      const auditInfo = _state.reviewAuditCount > 0
+        ? `\n\n【本次任务已经过 ${_state.reviewAuditCount} 轮审查框架审核】`
+        : '';
+      const stageSummary = Object.entries(_state.stageOutputs)
+        .map(([s, o]) => `[${s}] ${o.summary}`)
+        .join('\n');
+      const summaryPrompt = `请汇总本次任务执行情况并交付：\n\n需求：${userInput}\n\n各阶段摘要：\n${stageSummary}${auditInfo}`;
+      await runStage('done', summaryPrompt);
+      addMessage('command', 'command', 'result', `任务交付完成（${_state.reviewAuditCount} 轮审查框架审核）`);
     }
-    addMessage('develop', 'command', 'result', deploySuccess ? '部署成功' : '部署失败');
-
-    // done —— 指挥部终审（标注审查框架执行情况）
-    if (aborted()) return;
-    const auditInfo = _state.reviewAuditCount > 0
-      ? `\n\n【本次任务已经过 ${_state.reviewAuditCount} 轮审查框架审核】`
-      : '';
-    const summaryPrompt = `请汇总本次任务执行情况并交付：\n\n需求：${userInput}\n\n各阶段产出：\n${JSON.stringify(_state.stageOutputs, null, 2)}${auditInfo}`;
-    await runStage('done', summaryPrompt);
-    addMessage('command', 'command', 'result', `任务交付完成（${_state.reviewAuditCount} 轮审查框架审核）`);
 
   } catch (err: any) {
     const msg = err?.message || String(err);
