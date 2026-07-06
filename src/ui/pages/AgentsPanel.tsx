@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
-import { PipelineState, Agent, ModelConfig, Department } from '../../core/types';
+import React, { useState, useRef, useEffect } from 'react';
+import { PipelineState, Agent, ModelConfig, Department, SkillDefinition } from '../../core/types';
 import { getModelDisplayName } from '../../core/Pipeline';
+import { listSkills } from '../../core/skillRegistry';
 import { Plus, X, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 
 interface AgentsPanelProps {
@@ -408,8 +409,21 @@ const AgentCard: React.FC<{
   onUpdateAgent,
 }) => {
   const [dropdown, setDropdown] = useState(false);
+  const [showKey, setShowKey] = useState(false);
   const [skillInput, setSkillInput] = useState('');
+  const [skillDropdown, setSkillDropdown] = useState(false);
   const name = getModelDisplayName(models, agent.model);
+
+  // 基于当前输入过滤 skillRegistry，排除已添加的
+  const availableSkills = (() => {
+    const all = listSkills();
+    const filtered = skillInput.trim()
+      ? all.filter(s =>
+          s.name.toLowerCase().includes(skillInput.toLowerCase()) ||
+          s.id.toLowerCase().includes(skillInput.toLowerCase()))
+      : all;
+    return filtered.filter(s => !agent.skills.includes(s.id));
+  })();
 
   const addSkill = (skill: string) => {
     const s = skill.trim();
@@ -607,6 +621,38 @@ const AgentCard: React.FC<{
         />
       </div>
 
+      {/* API Key — 独立配置 */}
+      <div>
+        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 6, fontWeight: 500 }}>
+          API Key
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            type={showKey ? 'text' : 'password'}
+            placeholder="sk-..."
+            value={agent.apiKey}
+            onChange={e => onUpdateAgent(agent.id, { apiKey: e.target.value })}
+            className="glass-input"
+            style={{ flex: 1, padding: '5px 8px', fontSize: 12 }}
+          />
+          <button
+            onClick={() => setShowKey(!showKey)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-tertiary)',
+              cursor: 'pointer',
+              fontSize: 11,
+              padding: '4px 8px',
+              fontFamily: 'inherit',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {showKey ? '隐藏' : '显示'}
+          </button>
+        </div>
+      </div>
+
       {/* Assigned Skills (P1-5: 指挥 Agent 动态分配，只读) */}
       {agent.assignedSkills && agent.assignedSkills.length > 0 && (
         <div>
@@ -635,53 +681,119 @@ const AgentCard: React.FC<{
       {/* 技能 */}
       <div>
         <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 6, fontWeight: 500 }}>
-          Skills（手动覆盖）
+          Skills（手动覆盖 · 可从 Registry 选择）
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-          {agent.skills.map(s => (
-            <span
-              key={s}
-              style={{
-                padding: '2px 8px',
-                borderRadius: 4,
-                background: 'rgba(77,171,247,0.12)',
-                color: 'var(--accent)',
-                fontSize: 11,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-              }}
-            >
-              {s}
-              <button
-                onClick={() => removeSkill(s)}
+          {agent.skills.map(s => {
+            const def = listSkills().find(d => d.id === s);
+            return (
+              <span
+                key={s}
                 style={{
-                  background: 'none',
-                  border: 'none',
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  background: 'rgba(77,171,247,0.12)',
                   color: 'var(--accent)',
-                  cursor: 'pointer',
-                  padding: 0,
-                  fontSize: 13,
-                  lineHeight: 1,
-                  marginLeft: 2,
+                  fontSize: 11,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+                title={def ? `${def.name}: ${def.description}` : s}
+              >
+                {def ? def.name : s}
+                <button
+                  onClick={() => removeSkill(s)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent)',
+                    cursor: 'pointer',
+                    padding: 0,
+                    fontSize: 13,
+                    lineHeight: 1,
+                    marginLeft: 2,
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
+        </div>
+        <div style={{ position: 'relative', display: 'flex', gap: 8 }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <input
+              placeholder="输入技能 ID/名称，可从 Registry 下拉选择..."
+              value={skillInput}
+              onChange={e => {
+                setSkillInput(e.target.value);
+                setSkillDropdown(true);
+              }}
+              onFocus={() => setSkillDropdown(true)}
+              onBlur={() => setTimeout(() => setSkillDropdown(false), 150)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const firstAvailable = availableSkills[0];
+                  addSkill(firstAvailable ? firstAvailable.id : skillInput);
+                  setSkillDropdown(false);
+                }
+              }}
+              className="glass-input"
+              style={{ width: '100%', padding: '4px 8px', fontSize: 11 }}
+            />
+            {skillDropdown && availableSkills.length > 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  marginTop: 4,
+                  background: '#111127',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 8,
+                  maxHeight: 200,
+                  overflow: 'auto',
+                  zIndex: 60,
+                  boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
                 }}
               >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            placeholder="输入技能后按回车添加..."
-            value={skillInput}
-            onChange={e => setSkillInput(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') addSkill(skillInput);
-            }}
-            className="glass-input"
-            style={{ width: 220, padding: '4px 8px', fontSize: 11 }}
-          />
+                {availableSkills.map(s => (
+                  <button
+                    key={s.id}
+                    onMouseDown={e => {
+                      e.preventDefault();
+                      addSkill(s.id);
+                      setSkillDropdown(false);
+                    }}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '8px 12px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      fontFamily: 'inherit',
+                      borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(77,171,247,0.1)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <span style={{ fontWeight: 500 }}>{s.name}</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+                      {s.id} — {s.description.slice(0, 40)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button onClick={() => addSkill(skillInput)} className="btn btn-primary" style={{ fontSize: 11, padding: '4px 10px' }}>
             添加
           </button>
@@ -781,7 +893,18 @@ const AgentsPanel: React.FC<AgentsPanelProps> = ({
 }) => {
   const agents = pipeline.agents;
   const models = pipeline.models;
-  const [activeTab, setActiveTab] = useState<'agents' | 'rules'>('agents');
+  const [showApiModal, setShowApiModal] = useState(false);
+
+  // ESC 关闭弹窗
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowApiModal(false);
+    };
+    if (showApiModal) {
+      window.addEventListener('keydown', handleKey);
+      return () => window.removeEventListener('keydown', handleKey);
+    }
+  }, [showApiModal]);
 
   const nextIdRef = useRef(1);
   const genId = (dept: Department) => {
@@ -792,55 +915,29 @@ const AgentsPanel: React.FC<AgentsPanelProps> = ({
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto' }}>
-      {/* Tab 导航 */}
+      {/* Header */}
       <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
-          Agent 团队
-        </h2>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
-            {agents.length} Agent · {models.length} 模型 · {agents.filter(a => a.role === 'leader').length} 队长 · {agents.filter(a => a.apiKey).length} Key 已配
-          </span>
-          <div style={{ display: 'flex', gap: 4, background: 'var(--bg-input)', borderRadius: 8, padding: 3 }}>
-            {[
-              { id: 'agents' as const, label: '模型注册' },
-              { id: 'rules' as const, label: '审查规则' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                style={{
-                  padding: '6px 16px',
-                  borderRadius: 6,
-                  border: 'none',
-                  background: activeTab === tab.id ? 'var(--accent)' : 'transparent',
-                  color: activeTab === tab.id ? '#fff' : 'var(--text-secondary)',
-                  fontSize: 12,
-                  fontWeight: activeTab === tab.id ? 600 : 400,
-                  cursor: 'pointer',
-                  transition: 'all 150ms',
-                  fontFamily: 'inherit',
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+              Agent 团队
+            </h2>
+            <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
+              {agents.length} Agent · {models.length} 模型 · {agents.filter(a => a.role === 'leader').length} 队长 · {agents.filter(a => a.apiKey).length} Key 已配
+            </span>
           </div>
+          <button
+            onClick={() => setShowApiModal(true)}
+            className="btn btn-primary"
+            style={{ fontSize: 13, padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            API 管理中心
+          </button>
         </div>
       </div>
 
-      {activeTab === 'rules' ? (
-        <ReviewRulesTab />
-      ) : (
-        <>
-          <ModelRegistry
-            models={models}
-            agents={agents}
-            onAddModel={onAddModel}
-            onRemoveModel={onRemoveModel}
-            onUpdateAgent={onUpdateAgent}
-          />
-          {(['command', 'info', 'develop', 'review'] as Department[]).map(dept => {
+      {/* Agent 卡片列表 */}
+      {(['command', 'info', 'develop', 'review'] as Department[]).map(dept => {
         const deptAgents = agents.filter(a => a.department === dept);
         const color = DEPT_COLORS[dept];
         const leader = deptAgents.find(a => a.role === 'leader');
@@ -908,7 +1005,88 @@ const AgentsPanel: React.FC<AgentsPanelProps> = ({
           </div>
         );
       })}
-        </>
+
+      {/* 审查规则 */}
+      <div style={{ marginTop: 40 }}>
+        <ReviewRulesTab />
+      </div>
+
+      {/* API 管理中心弹窗 */}
+      {showApiModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onClick={() => setShowApiModal(false)}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(0,0,0,0.6)',
+              backdropFilter: 'blur(2px)',
+            }}
+          />
+          <div
+            style={{
+              position: 'relative',
+              width: 600,
+              height: '70vh',
+              maxHeight: '90vh',
+              background: '#0d0d24',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 14,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '16px 20px',
+              borderBottom: '1px solid var(--border)',
+              flexShrink: 0,
+            }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
+                API 管理中心
+                <span style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 400, marginLeft: 10 }}>
+                  {models.length} 模型 · {agents.filter(a => a.apiKey).length} Key 已配
+                </span>
+              </span>
+              <button
+                onClick={() => setShowApiModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-tertiary)',
+                  cursor: 'pointer',
+                  padding: 4,
+                  borderRadius: 6,
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
+              <ModelRegistry
+                models={models}
+                agents={agents}
+                onAddModel={onAddModel}
+                onRemoveModel={onRemoveModel}
+                onUpdateAgent={onUpdateAgent}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
