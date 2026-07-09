@@ -1,0 +1,275 @@
+import React, { useState } from 'react';
+import { PipelineState, Department } from '../../core/types';
+import { Activity, GitBranch, Users, Play, ShieldCheck, Box, Rocket, Gauge, Eye } from 'lucide-react';
+import { STAGE_PROGRESS_FULL } from '../../core/Pipeline';
+import ReviewTemplates from '../components/ReviewTemplates';
+import StatsPanel from '../components/StatsPanel';
+import GitPanel from '../components/GitPanel';
+import { useAppStore } from '../../store/appStore';
+
+interface DashboardProps {
+  pipeline: PipelineState;
+  onNavigate: (page: string) => void;
+  onStartPipeline: (userInput: string) => void;
+  batchQueue?: Array<{
+    id: string;
+    userInput: string;
+    status: 'queued' | 'running' | 'done' | 'failed';
+  }>;
+  onStartBatch?: (inputs: string[]) => void;
+}
+
+const STAGE_LABELS: Record<string, { label: string; icon: React.ElementType }> = {
+  difficulty_assess: { label: '难度评估', icon: Gauge },
+  init: { label: '制定方案', icon: Activity },
+  audit_entry: { label: '审查框架把关', icon: ShieldCheck },
+  extract: { label: '信息提取', icon: Box },
+  content_review: { label: '内容审核', icon: ShieldCheck },
+  develop: { label: '开发编码', icon: Play },
+  code_review: { label: '代码审核', icon: ShieldCheck },
+  deep_audit: { label: '系统级深度审计', icon: ShieldCheck },
+  deploy: { label: '部署上线', icon: Rocket },
+  done: { label: '完成', icon: ShieldCheck },
+};
+
+const DIFFICULTY_BADGE: Record<string, { label: string; color: string }> = {
+  simple: { label: '简单档 · 快速通道', color: 'var(--accent-green)' },
+  medium: { label: '中等档 · 单轮审查', color: 'var(--accent)' },
+  complex: { label: '复杂档 · 多轮深度审查', color: 'var(--accent-purple)' },
+};
+
+const Dashboard: React.FC<DashboardProps> = ({ pipeline, onNavigate, onStartPipeline, batchQueue = [], onStartBatch }) => {
+  const activeAgents = pipeline.agents.filter(a => a.status === 'running').length;
+  const idleAgents = pipeline.agents.filter(a => a.status === 'idle').length;
+  const errorAgents = pipeline.agents.filter(a => a.status === 'error').length;
+  const totalTasks = pipeline.tasks.length;
+
+  const currentStage = STAGE_LABELS[pipeline.stage] || STAGE_LABELS.difficulty_assess;
+  const StageIcon = currentStage.icon;
+  const displayProgress = pipeline.progress > 0 ? pipeline.progress : (STAGE_PROGRESS_FULL[pipeline.stage] ?? 0);
+
+  const [userInput, setUserInput] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isBatchMode, setIsBatchMode] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!userInput.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    if (isBatchMode && onStartBatch) {
+      const lines = userInput.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length > 1) {
+        onStartBatch(lines);
+      } else {
+        onStartPipeline(userInput);
+      }
+    } else {
+      onStartPipeline(userInput);
+    }
+    setUserInput('');
+    onNavigate('pipeline');
+    setIsSubmitting(false);
+  };
+
+  const difficultyBadge = pipeline.difficulty ? DIFFICULTY_BADGE[pipeline.difficulty] : null;
+
+  return (
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+      {/* Hero */}
+      <div
+        className="glass-card"
+        style={{ padding: '48px 52px', marginBottom: 36, borderRadius: 'var(--radius-xl)' }}
+      >
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <h1
+            style={{
+              fontSize: 48, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.1,
+              marginBottom: 16,
+              background: 'linear-gradient(135deg, var(--accent), var(--accent-secondary))',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+            }}
+          >
+            Hank Agent Team
+          </h1>
+          <p style={{ fontSize: 18, color: 'var(--text-secondary)', lineHeight: 1.7, maxWidth: 640, marginLeft: 'auto', marginRight: 'auto' }}>
+            异构多智能体协作集群 · 指挥部 / 信息部 / 开发部 / 审核部四部门协作，集成瀚海对抗性审查框架。
+          </p>
+
+          {/* 难度徽章 */}
+          {difficultyBadge && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              marginTop: 16, padding: '6px 16px', borderRadius: 20,
+              background: `${difficultyBadge.color}15`, border: `1px solid ${difficultyBadge.color}40`,
+            }}>
+              <Gauge size={14} color={difficultyBadge.color} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: difficultyBadge.color }}>
+                {difficultyBadge.label}
+              </span>
+              {pipeline.reviewAuditCount > 0 && (
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                  · 已执行 {pipeline.reviewAuditCount} 轮审查框架
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <div>
+            <label htmlFor="user-input" style={{ display: 'block', fontSize: 14, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 12 }}>
+              请描述你的需求
+              <span style={{ float: 'right', fontSize: 11, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <ReviewTemplates onSelectTemplate={(tpl) => setUserInput(tpl)} />
+                <GitPanel onStartReview={onStartPipeline} />
+                <label style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <input type="checkbox" checked={isBatchMode} onChange={(e) => setIsBatchMode(e.target.checked)} style={{ cursor: 'pointer' }} />
+                  批量模式（每行一个需求）
+                </label>
+              </span>
+            </label>
+            <textarea
+              id="user-input"
+              value={userInput}
+              onChange={e => setUserInput(e.target.value)}
+              placeholder={isBatchMode ? "每行输入一个审查需求...\n审查文件 A 的安全性\n审查文件 B 的性能\n审查文件 C 的代码规范" : "例如：帮我设计一个支持多 Agent 协作的系统架构..."}
+              rows={isBatchMode ? 5 : 3}
+              style={{
+                width: '100%', padding: '14px 18px', borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border)', background: 'var(--bg-card)',
+                color: 'var(--text-primary)', fontSize: 14, resize: 'vertical', minHeight: isBatchMode ? 140 : 120,
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
+            <button
+              className="btn btn-primary btn-lg"
+              onClick={handleSubmit}
+              disabled={!userInput.trim() || isSubmitting}
+              style={{
+                minWidth: 200, boxShadow: '0 0 20px rgba(77, 171, 247, 0.2)',
+                opacity: !userInput.trim() || isSubmitting ? 0.6 : 1,
+                cursor: !userInput.trim() || isSubmitting ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {isSubmitting ? (
+                <span className="dot-loader"><span /><span /><span /></span>
+              ) : '启动流水线'}
+            </button>
+            <button className="btn btn-secondary btn-lg" onClick={() => onNavigate('agents')} style={{ minWidth: 160 }}>
+              配置团队
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
+        {[
+          { label: '活跃 Agent', value: activeAgents, color: 'var(--accent-green)', icon: Activity },
+          { label: '待命 Agent', value: idleAgents, color: 'var(--text-tertiary)', icon: Users },
+          { label: '审查框架执行', value: pipeline.reviewAuditCount, color: 'var(--accent-purple)', icon: ShieldCheck },
+          { label: '错误', value: errorAgents, color: 'var(--accent-red)', icon: ShieldCheck },
+        ].map(stat => {
+          const Icon = stat.icon;
+          return (
+            <div key={stat.label} className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 500 }}>{stat.label}</span>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: `${stat.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon size={14} color={stat.color} />
+                </div>
+              </div>
+              <div style={{ fontSize: 32, fontWeight: 700, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Quick Actions */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+        {[
+          { label: '流水线监控', desc: '查看任务执行流程与各阶段状态', icon: GitBranch, page: 'pipeline' },
+          { label: '审查框架详情', desc: '查看三层审查（准备/判定/总结）', icon: ShieldCheck, page: 'review' },
+          { label: '穿透监控', desc: '单点提问任意部门，查看事件流', icon: Eye, page: 'monitor' },
+        ].map(item => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.label}
+              onClick={() => onNavigate(item.page)}
+              className="glass-card"
+              style={{
+                padding: '24px', border: 'none', cursor: 'pointer', textAlign: 'left',
+                background: 'var(--bg-card)', width: '100%', whiteSpace: 'normal',
+                fontFamily: 'inherit', display: 'block',
+              }}
+            >
+              <div style={{
+                width: 40, height: 40, borderRadius: 10,
+                background: 'rgba(77,171,247,0.1)', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+              }}>
+                <Icon size={20} color="var(--accent)" />
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{item.label}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.5, wordBreak: 'break-all' }}>{item.desc}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* P0-4: Batch Queue */}
+      {batchQueue.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div className="glass-card" style={{ padding: 20 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Activity size={16} color="var(--accent)" />
+              审查队列（{batchQueue.filter(b => b.status === 'done').length}/{batchQueue.length}）
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {batchQueue.map((item, i) => {
+                const statusColors: Record<string, string> = {
+                  queued: 'var(--text-tertiary)',
+                  running: 'var(--accent)',
+                  done: 'var(--accent-green)',
+                  failed: 'var(--accent-red)',
+                };
+                const statusLabels: Record<string, string> = {
+                  queued: '排队中',
+                  running: '执行中',
+                  done: '已完成',
+                  failed: '失败',
+                };
+                return (
+                  <div key={item.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 12px', borderRadius: 6,
+                    background: 'rgba(255,255,255,0.02)', fontSize: 13,
+                  }}>
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: 11, width: 24 }}>#{i + 1}</span>
+                    <span style={{ color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.userInput.length > 60 ? item.userInput.slice(0, 60) + '...' : item.userInput}
+                    </span>
+                    <span style={{
+                      padding: '2px 8px', borderRadius: 4,
+                      background: `${statusColors[item.status]}15`,
+                      color: statusColors[item.status], fontSize: 11, fontWeight: 600,
+                      flexShrink: 0,
+                    }}>
+                      {item.status === 'running' && <span style={{ animation: 'dot-pulse 1.4s var(--spring) infinite' }}>● </span>}
+                      {statusLabels[item.status]}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+      <StatsPanel history={useAppStore((s) => s.history)} />
+    </div>
+  );
+};
+
+export default Dashboard;

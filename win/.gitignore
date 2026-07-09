@@ -1,0 +1,24 @@
+node_modules/
+dist/
+build/
+.DS_Store
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 本地配置（含 API Key）
+.env
+.env.local
+
+# 临时文件
+temp/
+*.tmp
+
+# 打包产物 / Windows
+/release/
+/out/
+Thumbs.db
