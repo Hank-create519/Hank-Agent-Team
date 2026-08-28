@@ -52,6 +52,8 @@ Hank Agent Team 是一个桌面端 AI 团队模拟器——你把需求扔进去
 
 ## 核心机制
 
+![四部门流水线总览](../docs/architecture/pipeline-overview.svg)
+
 ### 四部门
 
 | 部门 | 代号 | 职责 |
@@ -81,11 +83,17 @@ graph TD
 - **失败重试**：部署阶段失败自动重试 1 次
 - **实时监控**：Communication 总线全局追踪部门间通信
 
+### 审查打回闭环
+
+![审查打回闭环](../docs/architecture/review-loop.svg)
+
 ---
 
 ## 安全机制
 
 五层纵深防御，按部门控制可调用工具：
+
+![五层安全纵深防御](../docs/architecture/security-layers.svg)
 
 | 层级 | 名称 | 策略 |
 |:---:|------|------|
@@ -100,6 +108,8 @@ graph TD
 ## 多协议 LLM
 
 47 个预置模型覆盖 14 家厂商，Agent 级独立配置 API Key：
+
+![LLM 多协议接入层](../docs/architecture/llm-gateway.svg)
 
 | Provider | 端点 | 认证方式 |
 |----------|------|----------|

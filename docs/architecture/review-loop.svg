@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="720" viewBox="0 0 1240 720" font-family="'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="rl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/>
+    </marker>
+    <marker id="rl-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f85149"/>
+    </marker>
+    <marker id="rl-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3fb950"/>
+    </marker>
+  </defs>
+
+  <style>
+    .rl-title{font-size:30px;font-weight:700;fill:#e6edf3}
+    .rl-sub{font-size:14px;fill:#8b949e}
+    .boxName{font-size:17px;font-weight:700;fill:#e6edf3}
+    .boxDesc{font-size:12.5px;fill:#b6c2cf}
+    .roundNum{font-size:12px;font-weight:700;fill:#0d1117}
+    .rl-label{font-size:13px;font-weight:600}
+    .round{font-size:12px;fill:#8b949e}
+    .counter{font-size:13px;font-weight:700;font-family:Consolas,monospace}
+  </style>
+
+  <rect width="1240" height="720" rx="12" fill="#0d1117"/>
+  <rect x="1" y="1" width="1238" height="718" rx="11" fill="none" stroke="#30363d" stroke-width="1.5"/>
+
+  <text x="620" y="52" text-anchor="middle" class="rl-title">双重审查打回闭环</text>
+  <text x="620" y="78" text-anchor="middle" class="rl-sub">内容审核与代码审核独立计数 · 每阶段最多 3 轮 · 超限自动暂停 —— 让漏洞在内部循环中暴露，而不是流到交付物里</text>
+
+  <!-- ══════════ 上半：内容审核闭环（阶段3-4） ══════════ -->
+  <text x="620" y="122" text-anchor="middle" font-size="16" font-weight="700" fill="#58a6ff">── 内容审核闭环（信息提取 → 内容审核）──</text>
+
+  <!-- 信息提取 box -->
+  <rect x="150" y="145" width="230" height="86" rx="10" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+  <text x="265" y="180" text-anchor="middle" class="boxName">③ 信息提取</text>
+  <text x="265" y="210" text-anchor="middle" class="boxDesc">信息部结构化用户需求</text>
+
+  <!-- 内容审核 box -->
+  <rect x="860" y="145" width="230" height="86" rx="10" fill="#161b22" stroke="#bc8cff" stroke-width="2"/>
+  <text x="975" y="180" text-anchor="middle" class="boxName">④ 内容审核</text>
+  <text x="975" y="210" text-anchor="middle" class="boxDesc">审核部检验需求完整性</text>
+
+  <!-- forward arrow -->
+  <line x1="380" y1="188" x2="852" y2="188" stroke="#8b949e" stroke-width="2" marker-end="url(#rl-arrow)"/>
+  <text x="616" y="180" text-anchor="middle" class="rl-label" fill="#8b949e">提交需求文档</text>
+
+  <!-- reject loop back -->
+  <path d="M 975 231 L 975 268 L 265 268 L 265 239" fill="none" stroke="#f85149" stroke-width="2.5" stroke-dasharray="7,5" marker-end="url(#rl-red)"/>
+  <rect x="520" y="252" width="200" height="32" rx="16" fill="#2d1a1c" stroke="#f85149" stroke-width="1.5"/>
+  <text x="620" y="273" text-anchor="middle" class="rl-label" fill="#f85149">✕ 打回 · 补充遗漏信息</text>
+
+  <!-- round counters row 1 -->
+  <g>
+    <circle cx="480" cy="330" r="22" fill="#1c2128" stroke="#3fb950" stroke-width="2"/>
+    <text x="480" y="335" text-anchor="middle" class="roundNum" fill="#3fb950">R1</text>
+    <circle cx="560" cy="330" r="22" fill="#1c2128" stroke="#e3b341" stroke-width="2"/>
+    <text x="560" y="335" text-anchor="middle" class="roundNum" fill="#e3b341">R2</text>
+    <circle cx="640" cy="330" r="22" fill="#1c2128" stroke="#f85149" stroke-width="2"/>
+    <text x="640" y="335" text-anchor="middle" class="roundNum" fill="#f85149">R3</text>
+    <text x="700" y="335" class="round">← 第 4 次仍不通过？自动暂停</text>
+  </g>
+
+  <!-- pass down -->
+  <line x1="975" y1="231" x2="975" y2="300" stroke="#3fb950" stroke-width="0" />
+  <path d="M 1090 188 L 1140 188 L 1140 340 L 985 340" fill="none" stroke="#3fb950" stroke-width="2.5" marker-end="url(#rl-green)"/>
+  <text x="1122" y="270" class="rl-label" fill="#3fb950" transform="rotate(90 1122 270)">✓ 通过 → 进入开发</text>
+
+  <!-- ══════════ 下半：代码审核闭环（阶段5-6） ══════════ -->
+  <text x="620" y="392" text-anchor="middle" font-size="16" font-weight="700" fill="#3fb950">── 代码审核闭环（开发编码 → 代码审核）──</text>
+
+  <rect x="150" y="415" width="230" height="86" rx="10" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+  <text x="265" y="450" text-anchor="middle" class="boxName">⑤ 开发编码</text>
+  <text x="265" y="480" text-anchor="middle" class="boxDesc">开发部按需求实现代码</text>
+
+  <rect x="860" y="415" width="230" height="86" rx="10" fill="#161b22" stroke="#bc8cff" stroke-width="2"/>
+  <text x="975" y="450" text-anchor="middle" class="boxName">⑥ 代码审核</text>
+  <text x="975" y="480" text-anchor="middle" class="boxDesc">审核部审查代码与安全</text>
+
+  <line x1="380" y1="458" x2="852" y2="458" stroke="#8b949e" stroke-width="2" marker-end="url(#rl-arrow)"/>
+  <text x="616" y="450" text-anchor="middle" class="rl-label" fill="#8b949e">提交代码产物</text>
+
+  <path d="M 975 501 L 975 538 L 265 538 L 265 509" fill="none" stroke="#f85149" stroke-width="2.5" stroke-dasharray="7,5" marker-end="url(#rl-red)"/>
+  <rect x="520" y="522" width="200" height="32" rx="16" fill="#2d1a1c" stroke="#f85149" stroke-width="1.5"/>
+  <text x="620" y="543" text-anchor="middle" class="rl-label" fill="#f85149">✕ 打回 · 修复缺陷重写</text>
+
+  <g>
+    <circle cx="480" cy="596" r="22" fill="#1c2128" stroke="#3fb950" stroke-width="2"/>
+    <text x="480" y="601" text-anchor="middle" class="roundNum" fill="#3fb950">R1</text>
+    <circle cx="560" cy="596" r="22" fill="#1c2128" stroke="#e3b341" stroke-width="2"/>
+    <text x="560" y="601" text-anchor="middle" class="roundNum" fill="#e3b341">R2</text>
+    <circle cx="640" cy="596" r="22" fill="#1c2128" stroke="#f85149" stroke-width="2"/>
+    <text x="640" y="601" text-anchor="middle" class="roundNum" fill="#f85149">R3</text>
+    <text x="700" y="601" class="round">← 计数独立于内容审核，互不干扰</text>
+  </g>
+
+  <!-- pause box -->
+  <rect x="905" y="575" width="185" height="42" rx="8" fill="#2d1a1c" stroke="#f85149" stroke-width="1.5"/>
+  <text x="997" y="601" text-anchor="middle" class="rl-label" fill="#f85149">⚠ 超限 → 流水线暂停</text>
+
+  <!-- pass arrow from code loop -->
+  <path d="M 150 458 L 90 458 L 90 660 L 1160 660 L 1160 458 L 1098 458" fill="none" stroke="#3fb950" stroke-width="0"/>
+
+  <!-- bottom成效 stats -->
+  <g>
+    <rect x="150" y="640" width="280" height="54" rx="10" fill="#11161d" stroke="#30363d"/>
+    <text x="290" y="663" text-anchor="middle" class="counter" fill="#3fb950">≤ 3 轮/阶段</text>
+    <text x="290" y="684" text-anchor="middle" class="rl-sub">打回收敛上限，防止无限循环</text>
+    <rect x="480" y="640" width="280" height="54" rx="10" fill="#11161d" stroke="#30363d"/>
+    <text x="620" y="663" text-anchor="middle" class="counter" fill="#bc8cff">2 × 独立计数器</text>
+    <text x="620" y="684" text-anchor="middle" class="rl-sub">内容质量与代码质量分开把关</text>
+    <rect x="810" y="640" width="280" height="54" rx="10" fill="#11161d" stroke="#30363d"/>
+    <text x="950" y="663" text-anchor="middle" class="counter" fill="#e3b341">100% 必审</text>
+    <text x="950" y="684" text-anchor="middle" class="rl-sub">无审核通过，流水线不放行</text>
+  </g>
+</svg>

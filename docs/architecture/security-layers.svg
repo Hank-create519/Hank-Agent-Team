@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="760" viewBox="0 0 1240 760" font-family="'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="sl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#e3b341"/>
+    </marker>
+    <linearGradient id="shieldGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#bc8cff" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#58a6ff" stop-opacity="0.04"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    .sl-title{font-size:30px;font-weight:700;fill:#e6edf3}
+    .sl-sub{font-size:14px;fill:#8b949e}
+    .layerName{font-size:17px;font-weight:700;fill:#e6edf3}
+    .layerTag{font-size:13px;font-weight:700;fill:#0d1117;font-family:Consolas,monospace}
+    .layerDesc{font-size:13px;fill:#b6c2cf}
+    .tool{font-size:12px;fill:#b6c2cf;font-family:Consolas,monospace}
+    .secLabel{font-size:14px;font-weight:700;fill:#e6edf3}
+  </style>
+
+  <rect width="1240" height="760" rx="12" fill="#0d1117"/>
+  <rect x="1" y="1" width="1238" height="758" rx="11" fill="none" stroke="#30363d" stroke-width="1.5"/>
+
+  <text x="620" y="52" text-anchor="middle" class="sl-title">五层安全纵深防御</text>
+  <text x="620" y="78" text-anchor="middle" class="sl-sub">Agent 的每一次工具调用都要穿过全部五层 —— 层层设防，单层失守不致命</text>
+
+  <!-- left funnel: request flows down through 5 layers -->
+  <g>
+    <!-- L1 -->
+    <rect x="120" y="110" width="560" height="96" rx="10" fill="#161b22" stroke="#bc8cff" stroke-width="2"/>
+    <rect x="120" y="110" width="70" height="96" rx="10" fill="#bc8cff"/>
+    <text x="155" y="152" text-anchor="middle" class="layerTag">L1</text>
+    <text x="155" y="172" text-anchor="middle" font-size="11" fill="#0d1117">白名单</text>
+    <text x="210" y="146" class="layerName">工具白名单</text>
+    <text x="210" y="172" class="layerDesc">按部门分配可调用工具：command / info / develop / review 各有独立权限表</text>
+    <text x="210" y="194" class="layerDesc" fill="#8b949e">审核部永远拿不到「执行」类工具，只能「看」不能「动」</text>
+
+    <line x1="400" y1="206" x2="400" y2="234" stroke="#e3b341" stroke-width="2.5" marker-end="url(#sl-arrow)"/>
+
+    <!-- L2 -->
+    <rect x="150" y="238" width="530" height="96" rx="10" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+    <rect x="150" y="238" width="70" height="96" rx="10" fill="#58a6ff"/>
+    <text x="185" y="280" text-anchor="middle" class="layerTag">L2</text>
+    <text x="185" y="300" text-anchor="middle" font-size="11" fill="#0d1117">限速</text>
+    <text x="240" y="274" class="layerName">速率限制</text>
+    <text x="240" y="300" class="layerDesc">单轮 ≤ 5 次调用 · 全 Session ≤ 50 次 · 相邻调用间隔 ≥ 1 秒</text>
+    <text x="240" y="322" class="layerDesc" fill="#8b949e">遏制 Agent 失控循环与 API 滥用</text>
+
+    <line x1="415" y1="334" x2="415" y2="362" stroke="#e3b341" stroke-width="2.5" marker-end="url(#sl-arrow)"/>
+
+    <!-- L3 -->
+    <rect x="180" y="366" width="500" height="96" rx="10" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+    <rect x="180" y="366" width="70" height="96" rx="10" fill="#3fb950"/>
+    <text x="215" y="408" text-anchor="middle" class="layerTag">L3</text>
+    <text x="215" y="428" text-anchor="middle" font-size="11" fill="#0d1117">校验</text>
+    <text x="270" y="402" class="layerName">参数校验</text>
+    <text x="270" y="428" class="layerDesc">URL 禁止内网 IP · 路径排除 /System /Library 等敏感目录</text>
+    <text x="270" y="450" class="layerDesc" fill="#8b949e">阻断 SSRF 探测与敏感路径读取</text>
+
+    <line x1="430" y1="462" x2="430" y2="490" stroke="#e3b341" stroke-width="2.5" marker-end="url(#sl-arrow)"/>
+
+    <!-- L4 -->
+    <rect x="210" y="494" width="470" height="96" rx="10" fill="#161b22" stroke="#e3b341" stroke-width="2"/>
+    <rect x="210" y="494" width="70" height="96" rx="10" fill="#e3b341"/>
+    <text x="245" y="536" text-anchor="middle" class="layerTag">L4</text>
+    <text x="245" y="556" text-anchor="middle" font-size="11" fill="#0d1117">沙箱</text>
+    <text x="300" y="530" class="layerName">沙箱执行</text>
+    <text x="300" y="556" class="layerDesc">子进程安全包装 · 隔离文件系统操作</text>
+    <text x="300" y="578" class="layerDesc" fill="#8b949e">即使命令恶意，破坏也被限制在沙箱内</text>
+
+    <line x1="445" y1="590" x2="445" y2="618" stroke="#e3b341" stroke-width="2.5" marker-end="url(#sl-arrow)"/>
+
+    <!-- L5 -->
+    <rect x="240" y="622" width="440" height="96" rx="10" fill="#161b22" stroke="#f85149" stroke-width="2"/>
+    <rect x="240" y="622" width="70" height="96" rx="10" fill="#f85149"/>
+    <text x="275" y="664" text-anchor="middle" class="layerTag">L5</text>
+    <text x="275" y="684" text-anchor="middle" font-size="11" fill="#0d1117">清洗</text>
+    <text x="330" y="658" class="layerName">结果清洗</text>
+    <text x="330" y="684" class="layerDesc">密钥正则过滤 · 单次输出 8000 字符截断</text>
+    <text x="330" y="706" class="layerDesc" fill="#8b949e">防止密钥等敏感信息回流进模型上下文</text>
+  </g>
+
+  <!-- right: per-department tool matrix -->
+  <g>
+    <text x="790" y="130" class="secLabel">按部门工具权限矩阵</text>
+    <rect x="790" y="150" width="380" height="298" rx="10" fill="#11161d" stroke="#30363d"/>
+
+    <!-- header -->
+    <text x="830" y="182" font-size="13" font-weight="700" fill="#e6edf3">工具类别</text>
+    <text x="1030" y="182" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="middle">可用部门</text>
+    <line x1="805" y1="194" x2="1155" y2="194" stroke="#30363d"/>
+
+    <text x="830" y="226" class="tool">web_search / fetch</text>
+    <rect x="1000" y="210" width="60" height="22" rx="11" fill="#238636" opacity="0.85"/>
+    <text x="1030" y="225" text-anchor="middle" font-size="11" fill="#fff">全部</text>
+
+    <text x="830" y="266" class="tool">file_read</text>
+    <rect x="1000" y="250" width="60" height="22" rx="11" fill="#238636" opacity="0.85"/>
+    <text x="1030" y="265" text-anchor="middle" font-size="11" fill="#fff">全部</text>
+
+    <text x="830" y="306" class="tool">file_write / edit</text>
+    <rect x="990" y="290" width="80" height="22" rx="11" fill="#bb8009" opacity="0.9"/>
+    <text x="1030" y="305" text-anchor="middle" font-size="11" fill="#0d1117">开发部</text>
+
+    <text x="830" y="346" class="tool">shell_exec（沙箱内）</text>
+    <rect x="990" y="330" width="80" height="22" rx="11" fill="#bb8009" opacity="0.9"/>
+    <text x="1030" y="345" text-anchor="middle" font-size="11" fill="#0d1117">开发部</text>
+
+    <text x="830" y="386" class="tool">deploy 上线</text>
+    <rect x="990" y="370" width="80" height="22" rx="11" fill="#8957e5" opacity="0.9"/>
+    <text x="1030" y="385" text-anchor="middle" font-size="11" fill="#fff">指挥部</text>
+
+    <text x="830" y="426" class="tool">审核/评分类</text>
+    <rect x="1000" y="410" width="60" height="22" rx="11" fill="#8957e5" opacity="0.9"/>
+    <text x="1030" y="425" text-anchor="middle" font-size="11" fill="#fff">审核部</text>
+  </g>
+
+  <!-- right: call flow mini -->
+  <g>
+    <text x="790" y="500" class="secLabel">一次工具调用的安检路径</text>
+    <rect x="790" y="520" width="380" height="198" rx="10" fill="#11161d" stroke="#30363d"/>
+    <rect x="820" y="545" width="320" height="34" rx="8" fill="#1c2128" stroke="#bc8cff"/>
+    <text x="980" y="567" text-anchor="middle" class="tool" fill="#e6edf3">Agent 发起工具调用请求</text>
+    <line x1="980" y1="579" x2="980" y2="595" stroke="#e3b341" stroke-width="2" marker-end="url(#sl-arrow)"/>
+    <rect x="820" y="599" width="320" height="34" rx="8" fill="#1c2128" stroke="#58a6ff"/>
+    <text x="980" y="621" text-anchor="middle" class="tool" fill="#e6edf3">L1~L3 静态校验（白名单/限速/参数）</text>
+    <line x1="980" y1="633" x2="980" y2="649" stroke="#e3b341" stroke-width="2" marker-end="url(#sl-arrow)"/>
+    <rect x="820" y="653" width="320" height="34" rx="8" fill="#1c2128" stroke="#e3b341"/>
+    <text x="980" y="675" text-anchor="middle" class="tool" fill="#e6edf3">L4 沙箱执行 → L5 清洗后返回</text>
+  </g>
+</svg>

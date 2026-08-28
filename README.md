@@ -44,6 +44,34 @@
 
 完整介绍（界面预览、机制详解、安全说明、构建指南）见 **[win/README.md](./win/README.md)**。
 
+## 🏗 架构一览
+
+<div align="center">
+
+**四部门流水线总览** —— 8 阶段主流程、双重打回、通信总线，一张图看懂运作逻辑
+
+<img src="docs/architecture/pipeline-overview.svg" alt="四部门流水线总览" width="100%" />
+
+<br/>
+
+**审查打回闭环** —— 内容审核与代码审核独立计数，每阶段最多 3 轮，超限自动暂停
+
+<img src="docs/architecture/review-loop.svg" alt="审查打回闭环" width="100%" />
+
+<br/>
+
+**五层安全纵深防御** —— Agent 的每一次工具调用都要穿过全部五层
+
+<img src="docs/architecture/security-layers.svg" alt="五层安全纵深防御" width="100%" />
+
+<br/>
+
+**LLM 多协议接入层** —— 47 个预置模型 / 14 家厂商，Agent 级独立配置，无 Key 降级 Mock
+
+<img src="docs/architecture/llm-gateway.svg" alt="LLM 多协议接入层" width="100%" />
+
+</div>
+
 ## 🚀 快速开始
 
 ```bash

@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="860" viewBox="0 0 1240 860" font-family="'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/>
+    </marker>
+    <marker id="arrowGold" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#e3b341"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f85149"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3fb950"/>
+    </marker>
+  </defs>
+
+  <style>
+    .title{font-size:30px;font-weight:700;fill:#e6edf3}
+    .sub{font-size:14px;fill:#8b949e}
+    .stageNum{font-size:11px;font-weight:700;fill:#0d1117}
+    .stageName{font-size:16px;font-weight:600;fill:#e6edf3}
+    .deptName{font-size:17px;font-weight:700;fill:#e6edf3}
+    .deptCode{font-size:12px;fill:#8b949e;font-family:Consolas,monospace}
+    .deptDuty{font-size:12.5px;fill:#b6c2cf}
+    .label{font-size:13px;font-weight:600}
+    .busText{font-size:13px;fill:#8b949e}
+    .legend{font-size:12.5px;fill:#b6c2cf}
+  </style>
+
+  <!-- background -->
+  <rect width="1240" height="860" rx="12" fill="#0d1117"/>
+  <rect x="1" y="1" width="1238" height="858" rx="11" fill="none" stroke="#30363d" stroke-width="1.5"/>
+
+  <text x="620" y="52" text-anchor="middle" class="title">四部门协作流水线 · 总览</text>
+  <text x="620" y="78" text-anchor="middle" class="sub">8 个标准化阶段 · 双重审查打回 · Communication 总线实时追踪部门间通信</text>
+
+  <!-- ══════════ 四部门角色行 ══════════ -->
+  <!-- 指挥部 -->
+  <rect x="80" y="108" width="250" height="92" rx="10" fill="#161b22" stroke="#e3b341" stroke-width="2"/>
+  <circle cx="115" cy="140" r="17" fill="#e3b341"/>
+  <text x="115" y="146" text-anchor="middle" class="stageNum" font-size="14">挥</text>
+  <text x="145" y="146" class="deptName">指挥部</text>
+  <text x="250" y="146" class="deptCode">command</text>
+  <text x="105" y="178" class="deptDuty">制定方案 · 统筹调度 · 最终交付</text>
+
+  <!-- 信息部 -->
+  <rect x="365" y="108" width="250" height="92" rx="10" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+  <circle cx="400" cy="140" r="17" fill="#58a6ff"/>
+  <text x="400" y="146" text-anchor="middle" class="stageNum" font-size="14">信</text>
+  <text x="430" y="146" class="deptName">信息部</text>
+  <text x="535" y="146" class="deptCode">info</text>
+  <text x="390" y="178" class="deptDuty">信息提取 · 需求分析</text>
+
+  <!-- 开发部 -->
+  <rect x="650" y="108" width="250" height="92" rx="10" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+  <circle cx="685" cy="140" r="17" fill="#3fb950"/>
+  <text x="685" y="146" text-anchor="middle" class="stageNum" font-size="14">开</text>
+  <text x="715" y="146" class="deptName">开发部</text>
+  <text x="820" y="146" class="deptCode">develop</text>
+  <text x="675" y="178" class="deptDuty">编码实现 · 部署上线</text>
+
+  <!-- 审核部 -->
+  <rect x="935" y="108" width="250" height="92" rx="10" fill="#161b22" stroke="#bc8cff" stroke-width="2"/>
+  <circle cx="970" cy="140" r="17" fill="#bc8cff"/>
+  <text x="970" y="146" text-anchor="middle" class="stageNum" font-size="14">审</text>
+  <text x="1000" y="146" class="deptName">审核部</text>
+  <text x="1105" y="146" class="deptCode">review</text>
+  <text x="960" y="178" class="deptDuty">内容审核 · 代码审查（双重把关）</text>
+
+  <!-- ══════════ 流水线阶段 ══════════ -->
+  <!-- Row 1: stages 1-4 -->
+  <g>
+    <rect x="80" y="252" width="220" height="74" rx="10" fill="#1c2128" stroke="#e3b341" stroke-width="1.5"/>
+    <circle cx="108" cy="280" r="14" fill="#e3b341"/><text x="108" y="285" text-anchor="middle" class="stageNum">1</text>
+    <text x="132" y="285" class="stageName">制定方案</text>
+    <text x="108" y="312" class="sub" font-size="12">指挥部输出初始方案</text>
+
+    <rect x="380" y="252" width="220" height="74" rx="10" fill="#1c2128" stroke="#bc8cff" stroke-width="1.5"/>
+    <circle cx="408" cy="280" r="14" fill="#bc8cff"/><text x="408" y="285" text-anchor="middle" class="stageNum">2</text>
+    <text x="432" y="285" class="stageName">审查把关</text>
+    <text x="408" y="312" class="sub" font-size="12">审核部预审方案可行性</text>
+
+    <rect x="680" y="252" width="220" height="74" rx="10" fill="#1c2128" stroke="#58a6ff" stroke-width="1.5"/>
+    <circle cx="708" cy="280" r="14" fill="#58a6ff"/><text x="708" y="285" text-anchor="middle" class="stageNum">3</text>
+    <text x="732" y="285" class="stageName">信息提取</text>
+    <text x="708" y="312" class="sub" font-size="12">信息部结构化需求</text>
+
+    <rect x="980" y="252" width="220" height="74" rx="10" fill="#1c2128" stroke="#bc8cff" stroke-width="1.5"/>
+    <circle cx="1008" cy="280" r="14" fill="#bc8cff"/><text x="1008" y="285" text-anchor="middle" class="stageNum">4</text>
+    <text x="1032" y="285" class="stageName">内容审核</text>
+    <text x="1008" y="312" class="sub" font-size="12">审核部把关需求质量</text>
+
+    <line x1="300" y1="289" x2="372" y2="289" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="600" y1="289" x2="672" y2="289" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="900" y1="289" x2="972" y2="289" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- 打回: 4 → 3 -->
+  <path d="M 1090 326 L 1090 368 L 790 368 L 790 334" fill="none" stroke="#f85149" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowRed)"/>
+  <text x="945" y="360" text-anchor="middle" class="label" fill="#f85149">不通过 → 打回重提取（≤3 轮）</text>
+
+  <!-- Row 2: stages 5-8 (reverse direction) -->
+  <g>
+    <rect x="980" y="420" width="220" height="74" rx="10" fill="#1c2128" stroke="#3fb950" stroke-width="1.5"/>
+    <circle cx="1008" cy="448" r="14" fill="#3fb950"/><text x="1008" y="453" text-anchor="middle" class="stageNum">5</text>
+    <text x="1032" y="453" class="stageName">开发编码</text>
+    <text x="1008" y="480" class="sub" font-size="12">开发部按需求实现</text>
+
+    <rect x="680" y="420" width="220" height="74" rx="10" fill="#1c2128" stroke="#bc8cff" stroke-width="1.5"/>
+    <circle cx="708" cy="448" r="14" fill="#bc8cff"/><text x="708" y="453" text-anchor="middle" class="stageNum">6</text>
+    <text x="732" y="453" class="stageName">代码审核</text>
+    <text x="708" y="480" class="sub" font-size="12">审核部审查代码质量</text>
+
+    <rect x="380" y="420" width="220" height="74" rx="10" fill="#1c2128" stroke="#3fb950" stroke-width="1.5"/>
+    <circle cx="408" cy="448" r="14" fill="#3fb950"/><text x="408" y="453" text-anchor="middle" class="stageNum">7</text>
+    <text x="432" y="453" class="stageName">部署上线</text>
+    <text x="408" y="480" class="sub" font-size="12">失败自动重试 1 次</text>
+
+    <rect x="80" y="420" width="220" height="74" rx="10" fill="#16261c" stroke="#3fb950" stroke-width="2.5"/>
+    <circle cx="108" cy="448" r="14" fill="#3fb950"/><text x="108" y="453" text-anchor="middle" class="stageNum">8</text>
+    <text x="132" y="453" class="stageName">完成交付</text>
+    <text x="108" y="480" class="sub" font-size="12">指挥部交付最终成果</text>
+
+    <line x1="980" y1="457" x2="908" y2="457" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="680" y1="457" x2="608" y2="457" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="380" y1="457" x2="308" y2="457" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- 4 → 5 通过 -->
+  <path d="M 1090 326 L 1090 412" fill="none" stroke="#3fb950" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+  <text x="1108" y="374" class="label" fill="#3fb950">通过</text>
+
+  <!-- 打回: 6 → 5 -->
+  <path d="M 790 494 L 790 530 L 1090 530 L 1090 502" fill="none" stroke="#f85149" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowRed)"/>
+  <text x="940" y="522" text-anchor="middle" class="label" fill="#f85149">不通过 → 打回重编码（≤3 轮，独立计数）</text>
+
+  <!-- S-connector from row1 left down to row2: visually 4→5 handled; 3→4 needs pass through: 3 passes to 4 already row1; row1→row2 via right side -->
+  <!-- connector: stage1 ← stage2 handled; input arrow into stage 1 -->
+  <path d="M 190 200 L 190 244" fill="none" stroke="#e3b341" stroke-width="2" marker-end="url(#arrowGold)"/>
+  <text x="205" y="228" class="label" fill="#e3b341">用户需求输入</text>
+
+  <!-- 超限暂停 badge -->
+  <rect x="380" y="530" width="220" height="40" rx="8" fill="#2d1a1c" stroke="#f85149" stroke-width="1.5"/>
+  <text x="490" y="555" text-anchor="middle" class="label" fill="#f85149">⚠ 超过 3 轮 → 自动暂停，等待人工介入</text>
+
+  <!-- ══════════ Communication 总线 ══════════ -->
+  <rect x="80" y="610" width="1080" height="52" rx="10" fill="#11161d" stroke="#30363d" stroke-width="1.5" stroke-dasharray="8,5"/>
+  <circle cx="115" cy="636" r="12" fill="none" stroke="#58a6ff" stroke-width="2"/>
+  <circle cx="115" cy="636" r="4" fill="#58a6ff"/>
+  <text x="140" y="641" class="busText" font-weight="600" fill="#e6edf3">Communication 通信总线</text>
+  <text x="340" y="641" class="busText">全局追踪部门间每一次消息往来 · 实时监控流水线状态 · LogStream 可视化输出</text>
+
+  <!-- bus connections: dashed verticals from each dept + stages to bus -->
+  <line x1="205" y1="200" x2="205" y2="610" stroke="#30363d" stroke-width="1.2" stroke-dasharray="3,5" opacity="0.7"/>
+  <line x1="490" y1="326" x2="490" y2="610" stroke="#30363d" stroke-width="1.2" stroke-dasharray="3,5" opacity="0.7"/>
+  <line x1="790" y1="200" x2="790" y2="610" stroke="#30363d" stroke-width="1.2" stroke-dasharray="3,5" opacity="0.7"/>
+  <line x1="1060" y1="200" x2="1060" y2="610" stroke="#30363d" stroke-width="1.2" stroke-dasharray="3,5" opacity="0.7"/>
+
+  <!-- ══════════ 图例 ══════════ -->
+  <g>
+    <line x1="80" y1="712" x2="120" y2="712" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="130" y="717" class="legend">主流程推进</text>
+    <line x1="250" y1="712" x2="290" y2="712" stroke="#f85149" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowRed)"/>
+    <text x="300" y="717" class="legend">审查打回</text>
+    <line x1="410" y1="712" x2="450" y2="712" stroke="#3fb950" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+    <text x="460" y="717" class="legend">审核通过</text>
+    <rect x="580" y="700" width="26" height="18" rx="4" fill="#bc8cff" opacity="0.25"/>
+    <text x="616" y="717" class="legend">审核部介入节点</text>
+    <text x="1160" y="717" text-anchor="end" class="legend" fill="#8b949e">核心源码：src/core/Engine.ts · Pipeline.ts</text>
+  </g>
+
+  <!-- bottom quote -->
+  <text x="620" y="780" text-anchor="middle" font-size="15" fill="#8b949e" font-style="italic">「假设有罪 + 对抗出真知」—— 每个方案在被证明可靠之前，默认存在漏洞</text>
+  <text x="620" y="812" text-anchor="middle" class="sub">Hank Agent Team · AI 驱动的四部门协作流水线引擎</text>
+</svg>
