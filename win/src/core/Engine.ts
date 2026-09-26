@@ -732,13 +732,13 @@ export async function startPipeline(userInput: string) {
             await executeReviewFramework(devOutput, 'code', _abortController.signal);
             if (aborted()) return;
 
-            if (_state.reviewFramework?.finalReport?.verdict === 'reject') {
+            if (_state.reviewFramework?.finalReport?.verdict !== 'pass') {
               codeApproved = false;
-              addLog(null, 'review', '系统级深度审计驳回，打回开发部', 'warning');
+              addLog(null, 'review', '系统级深度审计未通过或结果不确定，打回开发部', 'warning');
               _state = { ..._state, codeRejectCount: _state.codeRejectCount + 1 };
               notify();
             } else {
-              addLog(null, 'review', '系统级深度审计通过', 'success');
+              addLog(null, 'review', '系统级深度审计明确通过', 'success');
             }
           }
         } else {
