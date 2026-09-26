@@ -599,6 +599,7 @@ export async function startPipeline(userInput: string) {
 
       let contentApproved = false;
       let codeApproved = false;
+      let deepAuditPassed = false;
       for (const step of planSteps) {
         if (aborted()) return;
         if (step === 'difficulty_assess' || step === 'init' || step === 'audit_entry') continue;
@@ -630,9 +631,10 @@ export async function startPipeline(userInput: string) {
           if (_state.reviewFramework?.finalReport?.verdict !== 'pass') {
             throw new Error('深度审计未明确通过，禁止进入部署');
           }
+          deepAuditPassed = true;
         } else if (step === 'deploy') {
           if (!contentApproved || !codeApproved) throw new Error('审核门禁未通过，禁止部署');
-          if (_state.difficulty === 'complex' && _state.reviewFramework?.finalReport?.verdict !== 'pass') {
+          if (_state.difficulty === 'complex' && !deepAuditPassed) {
             throw new Error('复杂任务必须通过深度审计后才能部署');
           }
           let deploySuccess = false;
