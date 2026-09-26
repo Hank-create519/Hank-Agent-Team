@@ -286,6 +286,8 @@ function validatePlan(steps: PipelineStage[]): { valid: boolean; errors: string[
       continue;
     }
     if (seen.has(step)) errors.push(`计划重复包含阶段「${STAGE_LABELS[step]}」`);
+    if (!allowed.includes(step)) { errors.push(`计划包含未知阶段「${String(step)}」`); continue; }
+    if (seen.has(step)) errors.push(`计划重复包含阶段「${STAGE_LABELS[step]}」`);
     const deps = STAGE_DEPENDENCIES[step];
     if (deps) {
       for (const dep of deps) {
@@ -302,6 +304,11 @@ function validatePlan(steps: PipelineStage[]): { valid: boolean; errors: string[
     errors.push('深度审计必须安排在代码审核之后');
   }
 
+  for (const required of ['extract', 'content_review', 'develop', 'code_review', 'deploy', 'done'] as PipelineStage[]) {
+    if (!seen.has(required)) errors.push(`计划缺少必需阶段「${STAGE_LABELS[required]}」`);
+  }
+  if (_state.difficulty === 'complex' && !seen.has('deep_audit')) errors.push('复杂任务必须包含深度审计');
+  if (seen.has('deep_audit') && steps.indexOf('deep_audit') < steps.indexOf('code_review')) errors.push('深度审计必须在代码审核之后');
   const result = { valid: errors.length === 0, errors };
   if (!result.valid) {
     recordMonitorEvent('plan_validation', 'command', 'ConstitutionGuard',
