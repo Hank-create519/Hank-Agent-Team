@@ -276,17 +276,13 @@ const STAGE_DEPENDENCIES: Partial<Record<PipelineStage, PipelineStage[]>> = {
 function validatePlan(steps: PipelineStage[]): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   const allowed: PipelineStage[] = ['difficulty_assess', 'init', 'audit_entry', 'extract', 'content_review', 'develop', 'code_review', 'deep_audit', 'deploy', 'done'];
-  if (!Array.isArray(steps) || steps.length === 0) {
-    return { valid: false, errors: ['计划阶段必须是非空数组'] };
-  }
+  if (!Array.isArray(steps) || steps.length === 0) return { valid: false, errors: ['计划阶段必须是非空数组'] };
   const seen = new Set<PipelineStage>();
   for (const step of steps) {
     if (!allowed.includes(step)) {
       errors.push(`计划包含未知阶段「${String(step)}」`);
       continue;
     }
-    if (seen.has(step)) errors.push(`计划重复包含阶段「${STAGE_LABELS[step]}」`);
-    if (!allowed.includes(step)) { errors.push(`计划包含未知阶段「${String(step)}」`); continue; }
     if (seen.has(step)) errors.push(`计划重复包含阶段「${STAGE_LABELS[step]}」`);
     const deps = STAGE_DEPENDENCIES[step];
     if (deps) {
@@ -296,14 +292,6 @@ function validatePlan(steps: PipelineStage[]): { valid: boolean; errors: string[
     }
     seen.add(step);
   }
-
-  for (const required of ['extract', 'content_review', 'develop', 'code_review', 'deploy', 'done'] as PipelineStage[]) {
-    if (!seen.has(required)) errors.push(`计划缺少必需阶段「${STAGE_LABELS[required]}」`);
-  }
-  if (seen.has('deep_audit') && steps.indexOf('deep_audit') < steps.indexOf('code_review')) {
-    errors.push('深度审计必须安排在代码审核之后');
-  }
-
   for (const required of ['extract', 'content_review', 'develop', 'code_review', 'deploy', 'done'] as PipelineStage[]) {
     if (!seen.has(required)) errors.push(`计划缺少必需阶段「${STAGE_LABELS[required]}」`);
   }
