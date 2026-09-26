@@ -303,9 +303,7 @@ function validatePlan(steps: PipelineStage[]): { valid: boolean; errors: string[
       `Plan.steps 校验失败：${errors.join('；')}`, { errors });
   }
   return result;
-}
-
-function buildPlanStepContext(userInput: string): string {
+}function buildPlanStepContext(userInput: string): string {
   const parts: string[] = [`需求：${userInput}`];
   if (_state.plan) {
     parts.push(`\n方案摘要：${_state.plan.summary}`);
