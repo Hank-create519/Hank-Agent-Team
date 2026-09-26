@@ -73,44 +73,93 @@ export function clearSession(sessionId: string): void {
 
 // ============ 第三层：参数校验 ============
 
-const PRIVATE_IP_RE = /(^127\.)|(^10\.)|(^172\.1[6-9]\.)|(^172\.2\d\.)|(^172\.3[0-1]\.)|(^192\.168\.)|(^0\.)|(^169\.254\.)|(^::1$)|(^fc00:)|(^fe80:)/;
+const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+
+function isBlockedIPv4(host: string): boolean {
+  const match = host.match(IPV4_RE);
+  if (!match) return false;
+  const octets = match.slice(1).map(Number);
+  if (octets.some(n => n > 255)) return true;
+  const [a, b] = octets;
+  return a === 0 || a === 10 || a === 127 || a >= 224
+    || (a === 100 && b >= 64 && b <= 127)
+    || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && (b === 0 || b === 168))
+    || (a === 198 && (b === 18 || b === 19 || b === 51))
+    || (a === 203 && b === 0);
+}
 
 export function validateUrl(url: string): string | null {
   try {
     const u = new URL(url);
     if (u.protocol !== 'https:') {
-      return `URL 必须使用 HTTPS 协议，当前为: ${u.protocol}`;
+      return 'URL 必须使用 HTTPS 协议，当前为: ' + u.protocol;
     }
-    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '::1') {
-      return '禁止访问 localhost 地址';
+    if (u.username || u.password) {
+      return 'URL 不允许包含用户名或密码';
     }
-    if (PRIVATE_IP_RE.test(u.hostname)) {
-      return `禁止访问内网地址: ${u.hostname}`;
+    const hostname = u.hostname.toLowerCase().replace(/\.$/, '');
+    if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost')
+      || hostname.endsWith('.local') || hostname.endsWith('.internal')
+      || hostname.endsWith('.home.arpa') || !hostname.includes('.')) {
+      return '禁止访问本机或局域网主机: ' + (hostname || '(empty)');
+    }
+    if (hostname.startsWith('[') || hostname.includes(':') || isBlockedIPv4(hostname)) {
+      return '禁止访问 IP 字面量或保留地址: ' + hostname;
     }
     return null;
   } catch {
-    return `无效的 URL 格式: ${url}`;
+    return '无效的 URL 格式: ' + url;
   }
 }
 
-const SENSITIVE_PATH_FRAGMENTS = [
-  '/.ssh/', '/.git/', '/.svn/', '/.aws/', '/.kube/', '/.env',
-  '/etc/passwd', '/etc/shadow', '/proc/', '/sys/', '/dev/',
-];
+const SENSITIVE_PATH_SEGMENTS = new Set([
+  '.ssh', '.git', '.svn', '.aws', '.kube', '.env', 'passwd', 'shadow',
+  'proc', 'sys', 'dev',
+]);
 
 let _workDir: string | null = null;
 export function setWorkDir(dir: string) { _workDir = dir; }
 export function getWorkDir(): string | null { return _workDir; }
 
-export function validateFilePath(filePath: string): string | null {
-  const normalized = filePath.replace(/\\/g, '/');
-  for (const frag of SENSITIVE_PATH_FRAGMENTS) {
-    if (normalized.includes(frag)) {
-      return `禁止读取敏感路径（包含 ${frag}）`;
+function normalizePathForComparison(value: string): string | null {
+  if (!value || value.includes(String.fromCharCode(0))) return null;
+  const path = value.replace(/\\/g, '/');
+  if (path.startsWith('//')) return null;
+  const drive = path.match(/^([a-zA-Z]:)(?:\/|$)/);
+  const absolute = path.startsWith('/') || !!drive;
+  const prefix = drive ? drive[1].toLowerCase() : (path.startsWith('/') ? '/' : '');
+  const remainder = drive ? path.slice(drive[1].length).replace(/^\//, '') : path.replace(/^\//, '');
+  const segments: string[] = [];
+  for (const segment of remainder.split('/')) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') {
+      if (!segments.length) return null;
+      segments.pop();
+    } else {
+      segments.push(segment.toLowerCase());
     }
   }
-  if (_workDir && !normalized.startsWith(_workDir.replace(/\\/g, '/'))) {
-    return `文件路径不在工作目录范围内（工作目录: ${_workDir}）`;
+  return (absolute ? prefix : '') + '/' + segments.join('/');
+}
+
+export function validateFilePath(filePath: string): string | null {
+  const normalizedInput = normalizePathForComparison(filePath);
+  if (!normalizedInput) return '文件路径无效或不允许访问网络共享路径';
+  const candidate = /^[a-z]:\//.test(normalizedInput) || normalizedInput.startsWith('/')
+    ? normalizedInput
+    : _workDir ? normalizePathForComparison(_workDir + '/' + filePath) : null;
+  if (!candidate) return '工作目录尚未配置，拒绝读取文件';
+
+  const segments = candidate.split('/').filter(Boolean);
+  if (segments.some(segment => SENSITIVE_PATH_SEGMENTS.has(segment) || segment.startsWith('.env'))) {
+    return '禁止读取敏感路径';
+  }
+  const root = _workDir ? normalizePathForComparison(_workDir) : null;
+  if (!root) return '工作目录未配置或无效，拒绝读取文件';
+  if (!(candidate === root || candidate.startsWith(root.endsWith('/') ? root : root + '/'))) {
+    return '文件路径不在工作目录范围内（工作目录: ' + _workDir + ')';
   }
   return null;
 }
