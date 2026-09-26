@@ -284,6 +284,7 @@ function validatePlan(steps: PipelineStage[]): { valid: boolean; errors: string[
       continue;
     }
     if (seen.has(step)) errors.push(`计划重复包含阶段「${STAGE_LABELS[step]}」`);
+
     const deps = STAGE_DEPENDENCIES[step];
     if (deps) {
       for (const dep of deps) {
@@ -291,6 +292,15 @@ function validatePlan(steps: PipelineStage[]): { valid: boolean; errors: string[
       }
     }
     seen.add(step);
+  }
+  const requiredOrder: PipelineStage[] = ['extract', 'content_review', 'develop', 'code_review', 'deep_audit', 'deploy', 'done'];
+  let lastIndex = -1;
+  for (const stage of requiredOrder) {
+    const index = steps.indexOf(stage);
+    if (index >= 0) {
+      if (index < lastIndex) errors.push(`阶段「${STAGE_LABELS[stage]}」顺序错误`);
+      lastIndex = index;
+    }
   }
   for (const required of ['extract', 'content_review', 'develop', 'code_review', 'deploy', 'done'] as PipelineStage[]) {
     if (!seen.has(required)) errors.push(`计划缺少必需阶段「${STAGE_LABELS[required]}」`);
