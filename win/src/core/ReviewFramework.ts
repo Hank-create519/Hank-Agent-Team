@@ -216,25 +216,26 @@ export async function runReviewFramework(
   };
 
   // 辅助：调用 LLM
+  let reviewDegraded = false;
+
   async function callReviewAgent(
     agent: Agent,
     systemPrompt: string,
     userMsg: string,
   ): Promise<string> {
-    // 有 Key → 真实调用；无 Key → mock
     if (!agent.apiKey) {
+      reviewDegraded = true;
       return mockReviewFramework.systemPrompt;
     }
-
     const result = await callLLM(
       { ...agent, systemPrompt },
       opts.models,
-      'init' as any, // stage 不影响审查框架，仅用于 mock fallback
+      'init' as any,
       userMsg,
     );
-
-    if (result.error) {
-      return `[调用失败已降级] ${result.content}\n\n错误: ${result.error}`;
+    if (result.error || result.mock) {
+      reviewDegraded = true;
+      return '[调用失败已降级] ' + result.content + (result.error ? '\n\n错误: ' + result.error : '');
     }
     return result.content;
   }
@@ -400,6 +401,14 @@ export async function runReviewFramework(
 
   // 解析最终报告
   const report = parseFinalReport(finalResult);
+  if (reviewDegraded) {
+    report.verdict = 'conditional';
+    report.issues.unshift({
+      severity: 'high',
+      desc: '至少一名审查员使用模拟响应或降级响应，不能视为真实审查通过。',
+    });
+    report.suggestions.unshift('配置有效的模型 API 并重新执行审查。');
+  }
   report.totalRounds = state.totalRounds;
   report.totalElapsedMs = Date.now() - startTime;
   report.generatedAt = new Date().toISOString();
