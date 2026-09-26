@@ -275,18 +275,33 @@ const STAGE_DEPENDENCIES: Partial<Record<PipelineStage, PipelineStage[]>> = {
 
 function validatePlan(steps: PipelineStage[]): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
+  const allowed: PipelineStage[] = ['difficulty_assess', 'init', 'audit_entry', 'extract', 'content_review', 'develop', 'code_review', 'deep_audit', 'deploy', 'done'];
+  if (!Array.isArray(steps) || steps.length === 0) {
+    return { valid: false, errors: ['计划阶段必须是非空数组'] };
+  }
   const seen = new Set<PipelineStage>();
   for (const step of steps) {
+    if (!allowed.includes(step)) {
+      errors.push(`计划包含未知阶段「${String(step)}」`);
+      continue;
+    }
+    if (seen.has(step)) errors.push(`计划重复包含阶段「${STAGE_LABELS[step]}」`);
     const deps = STAGE_DEPENDENCIES[step];
     if (deps) {
       for (const dep of deps) {
-        if (!seen.has(dep)) {
-          errors.push(`阶段「${STAGE_LABELS[step]}」依赖「${STAGE_LABELS[dep]}」但后者未出现在计划中`);
-        }
+        if (!seen.has(dep)) errors.push(`阶段「${STAGE_LABELS[step]}」依赖「${STAGE_LABELS[dep]}」但后者未出现在计划中`);
       }
     }
     seen.add(step);
   }
+
+  for (const required of ['extract', 'content_review', 'develop', 'code_review', 'deploy', 'done'] as PipelineStage[]) {
+    if (!seen.has(required)) errors.push(`计划缺少必需阶段「${STAGE_LABELS[required]}」`);
+  }
+  if (seen.has('deep_audit') && steps.indexOf('deep_audit') < steps.indexOf('code_review')) {
+    errors.push('深度审计必须安排在代码审核之后');
+  }
+
   const result = { valid: errors.length === 0, errors };
   if (!result.valid) {
     recordMonitorEvent('plan_validation', 'command', 'ConstitutionGuard',
@@ -312,12 +327,12 @@ function buildPlanStepContext(userInput: string): string {
 
 // ============ 审核打回判定 ============
 function parseReviewResult(content: string): { approved: boolean; issues: string[] } {
-  const txt = content.toLowerCase();
-  const hasReject = /打回|不通过|驳回|拒绝|❌.*通过|判定：.*打回|驳回/.test(content);
-  const hasApprove = /通过|✅|approve|判定：.*通过/.test(txt);
-  if (hasReject && !hasApprove) {
+  const hasReject = /打回|不通过|驳回|拒绝|❌/.test(content);
+  const hasExplicitApprove = /(?:明确结论|审核结论|最终结论|判定)\s*[:：]?\s*(?:✅\s*)?(?:通过|approve\b)/i.test(content)
+    || /^\s*(?:✅\s*)?(?:通过|approved)\s*$/im.test(content);
+  if (hasReject || !hasExplicitApprove) {
     const issues = content.split('\n').filter(l => /问题|缺陷|漏洞|错误|建议|风险/.test(l)).slice(0, 5);
-    return { approved: false, issues: issues.length ? issues : ['审核未通过，具体见产出'] };
+    return { approved: false, issues: issues.length ? issues : [hasReject ? '审核存在拒绝结论' : '审核没有给出明确通过结论'] };
   }
   return { approved: true, issues: [] };
 }
@@ -542,7 +557,7 @@ export async function startPipeline(userInput: string) {
     addMessage('review', 'command', 'result', `审查框架完成（${_state.reviewFramework?.totalRounds || 1} 轮）`);
 
     // 方案审查被驳回 → 打回重新制定（最多1次）
-    if (_state.reviewFramework?.finalReport?.verdict === 'reject') {
+    if (_state.reviewFramework?.finalReport?.verdict !== 'pass') {
       addLog(null, 'command', '审查框架驳回方案，指挥部重新制定', 'warning');
       notify();
       const revisedOutput = await runStage('init',
@@ -589,25 +604,44 @@ export async function startPipeline(userInput: string) {
         `动态流水线启用：${planSteps.join(' → ')}`, { steps: planSteps });
       notify();
 
+      let contentApproved = false;
+      let codeApproved = false;
       for (const step of planSteps) {
         if (aborted()) return;
-        // 跳过已执行的阶段
         if (step === 'difficulty_assess' || step === 'init' || step === 'audit_entry') continue;
-
         const ctx = buildPlanStepContext(userInput);
 
         if (step === 'done') {
-          // done 阶段使用摘要汇总格式
+          if (!contentApproved || !codeApproved) throw new Error('审核门禁未通过，禁止交付');
           const auditInfo = _state.reviewAuditCount > 0
             ? `\n\n【本次任务已经过 ${_state.reviewAuditCount} 轮审查框架审核】`
             : '';
-          const stageSummary = Object.entries(_state.stageOutputs)
-            .map(([s, o]) => `[${s}] ${o.summary}`)
-            .join('\n');
-          const summaryPrompt = `请汇总本次任务执行情况并交付：\n\n需求：${userInput}\n\n各阶段摘要：\n${stageSummary}${auditInfo}`;
-          await runStage('done', summaryPrompt);
+          const stageSummary = Object.entries(_state.stageOutputs).map(([s, o]) => `[${s}] ${o.summary}`).join('\n');
+          await runStage('done', `请汇总本次任务执行情况并交付：\n\n需求：${userInput}\n\n各阶段摘要：\n${stageSummary}${auditInfo}`);
+        } else if (step === 'content_review') {
+          if (!_state.stageOutputs.extract?.content) throw new Error('缺少待审核的信息提取结果');
+          const output = await runStage('content_review', `请审核以下信息提取结果：\n\n${_state.stageOutputs.extract.content}`);
+          const result = parseReviewResult(output);
+          if (!result.approved) throw new Error(`内容审核未明确通过：${result.issues.join('；')}`);
+          contentApproved = true;
+        } else if (step === 'code_review') {
+          if (!_state.stageOutputs.develop?.content) throw new Error('缺少待审核的开发产出');
+          const output = await runStage('code_review', `请审核以下开发产出：\n\n${_state.stageOutputs.develop.content}`);
+          const result = parseReviewResult(output);
+          if (!result.approved) throw new Error(`代码审核未明确通过：${result.issues.join('；')}`);
+          codeApproved = true;
+        } else if (step === 'deep_audit') {
+          const code = _state.stageOutputs.develop?.content || '';
+          if (!codeApproved || !code) throw new Error('深度审计前代码审核尚未通过');
+          await executeReviewFramework(code, 'code', _abortController.signal);
+          if (_state.reviewFramework?.finalReport?.verdict !== 'pass') {
+            throw new Error('深度审计未明确通过，禁止进入部署');
+          }
         } else if (step === 'deploy') {
-          // 部署带重试
+          if (!contentApproved || !codeApproved) throw new Error('审核门禁未通过，禁止部署');
+          if (_state.difficulty === 'complex' && _state.reviewFramework?.finalReport?.verdict !== 'pass') {
+            throw new Error('复杂任务必须通过深度审计后才能部署');
+          }
           let deploySuccess = false;
           for (let attempt = 0; attempt < 2 && !deploySuccess; attempt++) {
             if (aborted()) return;
