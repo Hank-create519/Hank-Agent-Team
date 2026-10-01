@@ -45,7 +45,10 @@ function createWindow() {
     try {
       const u = new URL(url);
       if (app.isPackaged) {
-        allowed = u.protocol === 'file:';
+        // 仅允许应用自身打包资源（file: + 精确的 index.html 路径）
+        const selfPath = path.join(__dirname, 'dist', 'index.html').split(path.sep).join('/');
+        const navPath = decodeURIComponent(u.pathname).replace(/^\//, '');
+        allowed = u.protocol === 'file:' && navPath === selfPath.replace(/^\//, '');
       } else {
         allowed = (u.protocol === 'http:' && u.hostname === 'localhost' && u.port === '5173');
       }
@@ -77,15 +80,31 @@ ipcMain.handle('window-is-maximized', (event) => {
   return win ? win.isMaximized() : false;
 });
 
-// ==================== 受限 exec（仅允许 git 命令，供 GitPanel 使用） ====================
+// ==================== 受限 exec（仅允许 git 只读命令，供 GitPanel 使用） ====================
 // 使用 execFile 而非 exec：不经过 shell，参数逐项传递，避免命令注入。
-// 仅接受数组格式 ['git', ...args]（字符串模式已移除：空白拆分会破坏含空格路径）。
+// 仅接受数组格式 ['git', ...args]；子命令限定只读白名单，
+// 拒绝 reset/clean/push/commit 等可改变仓库状态或外联的子命令。
+const GIT_READONLY_SUBCOMMANDS = new Set([
+  'diff', 'status', 'log', 'show', 'ls-files', 'rev-parse', 'branch', 'remote', 'grep', 'shortlog',
+]);
+
 ipcMain.handle('exec', async (event, command) => {
   if (!Array.isArray(command) || command.length === 0 || command[0] !== 'git') {
     throw new Error('仅允许执行 git 命令（数组格式）');
   }
   if (command.length > 20) {
     throw new Error('参数数量超出限制');
+  }
+  // 识别子命令（跳过全局选项，如 -C <path>、--git-dir=...）
+  let subcommand = '';
+  for (let i = 1; i < command.length; i++) {
+    const a = String(command[i]);
+    if (a.startsWith('-')) continue;
+    subcommand = a;
+    break;
+  }
+  if (!GIT_READONLY_SUBCOMMANDS.has(subcommand)) {
+    throw new Error(`仅允许只读 git 子命令（${[...GIT_READONLY_SUBCOMMANDS].join(', ')}），拒绝「${subcommand || '(空)'}」`);
   }
   const args = command.slice(1).map((arg) => {
     const str = String(arg);
