@@ -68,8 +68,13 @@
                  "Microsoft YaHei", "Helvetica Neue", sans-serif;
     --font-mono: "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas, Menlo, monospace;
 
+    /* ── 液态玻璃材质 ── */
+    --glass-bg: rgba(24, 24, 29, 0.62);
+    --glass-bg-strong: rgba(18, 18, 22, 0.72);
+    --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+
     /* ── spring 缓动 ── */
-    --spring: cubic-bezier(0.25, 0.8, 0.25, 1);
+    --spring: cubic-bezier(0.32, 0.72, 0, 1);
   }
 
   /* 亮色主题（Apple 浅色档） */
@@ -95,6 +100,8 @@
     --text-tertiary:  #aeaeb2;
     --shadow-md: 0 2px 12px rgba(0, 0, 0, 0.08);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+    --glass-bg: rgba(255, 255, 255, 0.66);
+    --glass-bg-strong: rgba(255, 255, 255, 0.78);
   }
 }
 
@@ -121,35 +128,68 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* 环境光：两团极淡的系统色光晕，让玻璃面板有可折射的底色 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(1100px 640px at 10% -12%, rgba(10, 132, 255, 0.10), transparent 62%),
+    radial-gradient(1000px 720px at 108% 112%, rgba(94, 92, 230, 0.08), transparent 62%),
+    var(--bg-primary);
+}
+
 #root {
   height: 100vh;
   display: flex;
 }
 
-/* ── 卡片：发丝线 + 柔和抬升 ── */
+/* ── 液态玻璃工具类 ── */
+.liquid {
+  background: var(--glass-bg);
+  backdrop-filter: blur(28px) saturate(1.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6);
+}
+
+.liquid-strong {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(32px) saturate(1.7);
+  -webkit-backdrop-filter: blur(32px) saturate(1.7);
+}
+
+/* ── 卡片：液态玻璃 + 发丝线 + 悬停轻浮 ── */
 .glass-card {
-  background: var(--bg-elevated);
+  background: var(--glass-bg);
+  backdrop-filter: blur(24px) saturate(1.55);
+  -webkit-backdrop-filter: blur(24px) saturate(1.55);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  transition: border-color 240ms var(--spring), box-shadow 240ms var(--spring), transform 240ms var(--spring);
+  box-shadow: var(--shadow-sm), var(--glass-highlight);
+  transition: border-color 240ms var(--spring), box-shadow 240ms var(--spring),
+              transform 240ms var(--spring), background 240ms var(--spring);
 }
 
 .glass-card:hover {
   border-color: var(--border-light);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), var(--glass-highlight);
+  transform: translateY(-2px);
 }
 
 .glass-card-static {
-  background: var(--bg-elevated);
+  background: var(--glass-bg);
+  backdrop-filter: blur(24px) saturate(1.55);
+  -webkit-backdrop-filter: blur(24px) saturate(1.55);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), var(--glass-highlight);
 }
 
 /* ── 输入框 ── */
 .glass-input {
-  background: var(--bg-input);
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--text-primary);
@@ -288,6 +328,15 @@ body {
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.996); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.page-enter {
+  animation: page-in 340ms var(--spring) both;
 }
 
 @keyframes dot-pulse {

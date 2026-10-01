@@ -1,6 +1,6 @@
 {
   "name": "hank-agent-team",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Hank Agent Team - 多部门AI协作流水线系统",
   "author": "Hank",
   "main": "electron-main.js",

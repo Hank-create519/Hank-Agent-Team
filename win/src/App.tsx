@@ -421,7 +421,9 @@ const App: React.FC = () => {
           width: 320,
           minWidth: 320,
           height: '100vh',
-          background: 'var(--bg-card)',
+          background: 'var(--glass-bg-strong)',
+          backdropFilter: 'blur(32px) saturate(1.7)',
+          WebkitBackdropFilter: 'blur(32px) saturate(1.7)',
           borderLeft: '1px solid var(--border)',
           display: 'flex',
           flexDirection: 'column',
@@ -661,6 +663,7 @@ const App: React.FC = () => {
       >
         {/* Tab Navigation */}
         <div
+          className="liquid-strong"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -669,6 +672,7 @@ const App: React.FC = () => {
             borderBottom: '1px solid var(--border)',
             gap: 0,
             flexShrink: 0,
+            zIndex: 10,
             ...dragRegion('drag'),
           }}
         >
@@ -756,8 +760,10 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {/* Page Content */}
+        {/* Page Content（key 驱动切换过渡） */}
         <div
+          key={page}
+          className="page-enter"
           style={{
             flex: 1,
             overflow: 'auto',
@@ -769,11 +775,12 @@ const App: React.FC = () => {
 
         {/* Input Bar */}
         <div
+          className="liquid-strong"
           style={{
             borderTop: '1px solid var(--border)',
-            background: 'var(--bg-elevated)',
             padding: '12px 20px',
             flexShrink: 0,
+            zIndex: 10,
           }}
         >
           <div
