@@ -25,8 +25,13 @@ const GitPanel: React.FC<GitPanelProps> = ({ onStartReview }) => {
       // In Electron, use IPC or child_process via preload
       const win = window as any;
       if (win.electronAPI?.exec) {
-        const result = await win.electronAPI.exec('git diff --name-only');
-        const fileList = result
+        // exec 返回 { stdout, stderr, code }；用数组参数避免路径空格/选项注入
+        const result = await win.electronAPI.exec(['git', 'diff', '--name-only']);
+        if (result.code !== 0) {
+          setError(result.stderr || 'git diff 执行失败（当前目录可能不是 Git 仓库）');
+          return;
+        }
+        const fileList = (result.stdout || '')
           .split('\n')
           .map((s: string) => s.trim())
           .filter(Boolean)
@@ -60,8 +65,9 @@ const GitPanel: React.FC<GitPanelProps> = ({ onStartReview }) => {
     const diffContents: string[] = [];
     for (const file of selected) {
       try {
-        const diff = await win.electronAPI.exec(`git diff ${file.path}`);
-        diffContents.push(`## ${file.path}\n\`\`\`diff\n${diff}\n\`\`\``);
+        const result = await win.electronAPI.exec(['git', 'diff', '--', file.path]);
+        const diffText = result?.stdout || '';
+        diffContents.push(`## ${file.path}\n\`\`\`diff\n${diffText || '[无差异]'}\n\`\`\``);
       } catch (e) {
         diffContents.push(`## ${file.path}\n[获取 diff 失败]`);
       }

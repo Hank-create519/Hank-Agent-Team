@@ -1,5 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const fsp = fs.promises;
 const { execFile } = require('child_process');
 
 function createWindow() {
@@ -57,18 +59,45 @@ ipcMain.handle('window-is-maximized', (event) => {
 
 // ==================== 受限 exec（仅允许 git 命令，供 GitPanel 使用） ====================
 // 使用 execFile 而非 exec：不经过 shell，参数逐项传递，避免命令注入。
+// 支持两种入参：'git status' 字符串（按空白拆分）或 ['git','diff','--',path] 数组（推荐）。
 ipcMain.handle('exec', async (event, command) => {
-  const parts = String(command || '').trim().split(/\s+/);
-  if (parts.length === 0 || parts[0] !== 'git') {
-    throw new Error('仅允许执行 git 命令');
+  let args;
+  if (Array.isArray(command)) {
+    if (command.length === 0 || command[0] !== 'git') {
+      throw new Error('仅允许执行 git 命令');
+    }
+    args = command.slice(1).map(String);
+  } else {
+    const parts = String(command || '').trim().split(/\s+/);
+    if (parts.length === 0 || parts[0] !== 'git') {
+      throw new Error('仅允许执行 git 命令');
+    }
+    args = parts.slice(1);
   }
-  const args = parts.slice(1);
   return new Promise((resolve) => {
     execFile('git', args, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
       // git diff 在无差异时以非零码退出，但仍需返回 stdout
       resolve({ stdout: stdout || '', stderr: stderr || '', code: error ? error.code : 0 });
     });
   });
+});
+
+// ==================== 阶段产出持久化（原子写入 userData） ====================
+// 仅接受主窗口渲染进程的请求；写临时文件后 rename 覆盖，避免写入中断导致损坏。
+ipcMain.handle('persist-save', async (event, action, payload) => {
+  const win = BrowserWindow.getAllWindows().find(w => w.webContents.id === event.sender.id);
+  if (!win) throw new Error('非法来源');
+  if (typeof action !== 'string' || action.length > 64) throw new Error('非法 action');
+
+  const file = path.join(app.getPath('userData'), 'pipeline-state.json');
+  const tmp = file + '.tmp';
+  let data = {};
+  try { data = JSON.parse(await fsp.readFile(file, 'utf8')); } catch { data = {}; }
+  data[action] = payload;
+  data.savedAt = new Date().toISOString();
+  await fsp.writeFile(tmp, JSON.stringify(data), 'utf8');
+  await fsp.rename(tmp, file);
+  return true;
 });
 
 // ==================== 生命周期 ====================

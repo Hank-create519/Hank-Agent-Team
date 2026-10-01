@@ -12,4 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 受限命令执行（仅 git，由主进程安全校验），返回 { stdout, stderr, code }
   exec: (command) => ipcRenderer.invoke('exec', command),
+
+  // 阶段产出持久化（主进程原子写入 userData/pipeline-state.json）
+  persistSave: (action, payload) => ipcRenderer.invoke('persist-save', action, payload),
 });

@@ -69,6 +69,11 @@ export async function assessDifficulty(
 
     const content = result.content;
 
+    // 真实调用失败（不再降级 mock）→ 关键词兜底
+    if (result.status === 'failed' || !content) {
+      return keywordAssessment(userInput);
+    }
+
     // 解析档位
     let difficulty: Difficulty = 'medium';
     if (/simple/i.test(content)) difficulty = 'simple';

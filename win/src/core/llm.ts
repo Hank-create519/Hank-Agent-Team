@@ -13,8 +13,11 @@ export interface LLMResult {
   content: string;
   error?: string;
   elapsedMs: number;
-  mock: boolean;      // 是否走了 mock
+  mock: boolean;      // 兼容字段：status !== 'live' 时为 true
   retryCount: number; // 实际重试次数（0 表示首次成功或未重试）
+  // live = 真实调用成功；demo = 演示模式（未配置 Key）；
+  // failed = 真实调用失败（不返回任何 mock 内容，由引擎暂停并等待用户处理）
+  status: 'live' | 'demo' | 'failed';
 }
 
 type Provider = 'openai' | 'anthropic' | 'google';
@@ -41,6 +44,9 @@ const DEFAULT_BASE_URL: Record<string, string> = {
   'MiniMax': 'https://api.minimax.chat/v1',
   '零一万物': 'https://api.lingyiwanwu.com/v1',
   'Mistral': 'https://api.mistral.ai/v1',
+  '讯飞星火': 'https://spark-api-open.xf-yun.com/v1',
+  '字节豆包': 'https://ark.cn-beijing.volces.com/api/v3',
+  '百川智能': 'https://api.baichuan-ai.com/v1',
 };
 
 function resolveBaseUrl(agent: Agent, model: ModelConfig | undefined): string {
@@ -56,10 +62,19 @@ function resolveModelName(agent: Agent): string {
 
 const TIMEOUT_MS = 60000;
 
-function fetchWithTimeout(url: string, init: RequestInit, timeout: number): Promise<Response> {
+function fetchWithTimeout(url: string, init: RequestInit, timeout: number, signal?: AbortSignal): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
-  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+  // 将外部取消信号（引擎 stop）联动到本次请求
+  const onAbort = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort);
+  }
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => {
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', onAbort);
+  });
 }
 
 // ============ 重试退避包装 ============
@@ -82,6 +97,9 @@ async function fetchWithRetry(
       }
       return { response: res, retryCount };
     } catch (e) {
+      // 用户主动取消：立即抛出，不进入重试
+      if (e instanceof DOMException && e.name === 'AbortError') throw e;
+      if ((e as Error)?.name === 'AbortError') throw e;
       if (i === retries) throw e;
       retryCount++;
       const delay = BASE_DELAY_MS * Math.pow(2, i) + Math.random() * 500;
@@ -95,6 +113,7 @@ async function fetchWithRetry(
 async function callOpenAICompat(
   baseUrl: string, apiKey: string, model: string,
   systemPrompt: string, userPrompt: string,
+  signal?: AbortSignal,
 ): Promise<{ content: string; retryCount: number }> {
   const url = `${baseUrl}/chat/completions`;
   const { response: res, retryCount } = await fetchWithRetry(() => fetchWithTimeout(url, {
@@ -109,7 +128,7 @@ async function callOpenAICompat(
       temperature: 0.4,
       max_tokens: 4096,
     }),
-  }, TIMEOUT_MS));
+  }, TIMEOUT_MS, signal));
 
   if (!res.ok) {
     const body = await res.text();
@@ -123,6 +142,7 @@ async function callOpenAICompat(
 async function callAnthropic(
   baseUrl: string, apiKey: string, model: string,
   systemPrompt: string, userPrompt: string,
+  signal?: AbortSignal,
 ): Promise<{ content: string; retryCount: number }> {
   const url = `${baseUrl}/messages`;
   const { response: res, retryCount } = await fetchWithRetry(() => fetchWithTimeout(url, {
@@ -139,7 +159,7 @@ async function callAnthropic(
       max_tokens: 4096,
       temperature: 0.4,
     }),
-  }, TIMEOUT_MS));
+  }, TIMEOUT_MS, signal));
 
   if (!res.ok) {
     const body = await res.text();
@@ -153,6 +173,7 @@ async function callAnthropic(
 async function callGoogle(
   baseUrl: string, apiKey: string, model: string,
   systemPrompt: string, userPrompt: string,
+  signal?: AbortSignal,
 ): Promise<{ content: string; retryCount: number }> {
   const url = `${baseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const { response: res, retryCount } = await fetchWithRetry(() => fetchWithTimeout(url, {
@@ -163,7 +184,7 @@ async function callGoogle(
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
     }),
-  }, TIMEOUT_MS));
+  }, TIMEOUT_MS, signal));
 
   if (!res.ok) {
     const body = await res.text();
@@ -271,6 +292,7 @@ export async function callAIWithTools(
       elapsedMs: Date.now() - start,
       mock: true,
       retryCount: 0,
+      status: 'demo',
     };
   }
 
@@ -302,7 +324,7 @@ export async function callAIWithTools(
           const finalContent = await rawChatCompletion(
             provider, baseUrl, agent.apiKey, agent.model, localMessages, controller.signal,
           );
-          return { content: finalContent || '[工具循环耗尽]', elapsedMs: Date.now() - start, mock: false, retryCount: 0 };
+          return { content: finalContent || '[工具循环耗尽]', elapsedMs: Date.now() - start, mock: false, retryCount: 0, status: 'live' };
         }
       }
 
@@ -313,7 +335,7 @@ export async function callAIWithTools(
       // 解析响应：可能是文本或 tool_calls
       // rawChatCompletion 返回 JSON 字符串时需要解析
       if (!rawContent) {
-        return { content: '[空响应]', elapsedMs: Date.now() - start, mock: false, retryCount: 0 };
+        return { content: '[空响应]', elapsedMs: Date.now() - start, mock: false, retryCount: 0, status: 'live' };
       }
 
       // 尝试解析为 tool_calls JSON
@@ -358,19 +380,20 @@ export async function callAIWithTools(
 
 
       if (!hasToolCalls) {
-        return { content: rawContent, elapsedMs: Date.now() - start, mock: false, retryCount: 0 };
+        return { content: rawContent, elapsedMs: Date.now() - start, mock: false, retryCount: 0, status: 'live' };
       }
     }
 
-    return { content: '[工具循环耗尽]', elapsedMs: Date.now() - start, mock: false, retryCount: 0 };
+    return { content: '[工具循环耗尽]', elapsedMs: Date.now() - start, mock: false, retryCount: 0, status: 'live' };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return {
-      content: mockResponse(stage, userPrompt),
-      error: `工具循环失败已降级 mock：${msg}`,
+      content: '',
+      error: msg,
       elapsedMs: Date.now() - start,
-      mock: true,
+      mock: false,
       retryCount: 0,
+      status: 'failed',
     };
   }
 }
@@ -487,19 +510,21 @@ async function callGoogleRaw(
   return json.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 /**
- * 调用 LLM。有 Key 走真实协议，无 Key 走 mock。
- * 不抛异常 —— 错误返回在 error 字段，调用方自行处理。
+ * 调用 LLM。有 Key 走真实协议，无 Key 走 mock（演示模式）。
+ * 真实调用失败时【不再降级 mock】：返回 status='failed' 且不带内容，
+ * 由引擎暂停流水线并等待用户重试/修正配置。不抛异常。
  */
 export async function callLLM(
   agent: Agent,
   models: ModelConfig[],
   stage: PipelineStage,
   userPrompt: string,
+  signal?: AbortSignal,
 ): Promise<LLMResult> {
   const start = Date.now();
   const model = models.find(m => m.id === agent.model);
 
-  // 无 Key → mock 模式（模拟网络延迟）
+  // 无 Key → 演示模式（模拟网络延迟）
   if (!agent.apiKey) {
     await delay(600 + Math.random() * 700);
     return {
@@ -507,6 +532,7 @@ export async function callLLM(
       elapsedMs: Date.now() - start,
       mock: true,
       retryCount: 0,
+      status: 'demo',
     };
   }
 
@@ -520,30 +546,29 @@ export async function callLLM(
     let content: string;
     let retryCount = 0;
     if (provider === 'anthropic') {
-      const result = await callAnthropic(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt);
+      const result = await callAnthropic(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt, signal);
       content = result.content;
       retryCount = result.retryCount;
     } else if (provider === 'google') {
-      const result = await callGoogle(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt);
+      const result = await callGoogle(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt, signal);
       content = result.content;
       retryCount = result.retryCount;
     } else {
-      const result = await callOpenAICompat(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt);
+      const result = await callOpenAICompat(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt, signal);
       content = result.content;
       retryCount = result.retryCount;
     }
 
-    return { content: content || '[空响应]', elapsedMs: Date.now() - start, mock: false, retryCount };
+    return { content: content || '[空响应]', elapsedMs: Date.now() - start, mock: false, retryCount, status: 'live' };
   } catch (e: unknown) {
-    // 真实调用失败（重试耗尽或不可重试错误） → fallback 到 mock，保证流程不中断
     const msg = e instanceof Error ? e.message : String(e);
-    await delay(300);
     return {
-      content: mockResponse(stage, userPrompt),
-      error: `真实调用失败已降级 mock：${msg}`,
+      content: '',
+      error: msg,
       elapsedMs: Date.now() - start,
-      mock: true,
+      mock: false,
       retryCount: 0,
+      status: 'failed',
     };
   }
 }

@@ -51,7 +51,8 @@ export const STAGE_LABELS: Record<PipelineStage, string> = {
   develop: '开发编码',
   code_review: '代码审核',
   deep_audit: '系统级深度审计',
-  deploy: '部署上线',
+  // 未接入真实部署执行器：本阶段产出仅为部署说明，不产生"已部署"的事实
+  deploy: '部署说明（未接入执行器）',
   done: '完成交付',
 };
 
@@ -152,10 +153,10 @@ function setStage(stage: PipelineStage) {
   _state = { ..._state, stage, progress: table[stage] ?? 0 };
 }
 
-function saveStageOutput(stage: PipelineStage, agent: Agent, content: string, summary: string, status: StageOutput['status'], elapsedMs: number) {
+function saveStageOutput(stage: PipelineStage, agent: Agent, content: string, summary: string, status: StageOutput['status'], elapsedMs: number, source: StageOutput['source'] = 'live') {
   const out: StageOutput = {
     stage, agentId: agent.id, agentName: agent.name,
-    department: agent.department, content, summary, status, elapsedMs,
+    department: agent.department, content, summary, status, source, elapsedMs,
     timestamp: new Date().toISOString(),
   };
   _state = { ..._state, stageOutputs: { ..._state.stageOutputs, [stage]: out } };
@@ -234,8 +235,25 @@ async function runStage(stage: PipelineStage, userPrompt: string, opts?: { force
     };
   }
 
-  const result = await callLLM(effectiveAgent, _state.models, stage, finalPrompt);
+  // 真实调用。失败时不降级 mock：标记阶段失败并暂停，
+  // 用户「继续」= 重试本阶段，「停止」= 中止任务。
+  let result = await callLLM(effectiveAgent, _state.models, stage, finalPrompt, _abortController?.signal);
+  while (result.status === 'failed') {
+    setAgentStatus(agent.id, 'error', STAGE_LABELS[stage]);
+    saveStageOutput(stage, agent, '', `调用失败：${result.error || '未知错误'}`, 'error', 0, 'live');
+    addLog(agent, dept, `LLM 调用失败：${result.error || '未知错误'}。已暂停 —— 点击「继续」重试本阶段，或「停止」结束任务。`, 'error');
+    recordMonitorEvent('api_failure', dept, agent.name,
+      `「${STAGE_LABELS[stage]}」真实调用失败，暂停等待处理`, { stage, error: result.error });
+    notify();
+    await waitIfPaused();
+    if (aborted()) throw new DOMException('Aborted', 'AbortError');
+    setAgentStatus(agent.id, 'running', STAGE_LABELS[stage]);
+    addLog(agent, dept, `重试「${STAGE_LABELS[stage]}」`, 'info');
+    notify();
+    result = await callLLM(effectiveAgent, _state.models, stage, finalPrompt, _abortController?.signal);
+  }
   const elapsedMs = Date.now() - start;
+  const source: StageOutput['source'] = result.status === 'demo' ? 'demo' : 'live';
 
   // P1-4: 记录重试事件
   if (result.retryCount > 0) {
@@ -247,10 +265,8 @@ async function runStage(stage: PipelineStage, userPrompt: string, opts?: { force
   setAgentStatus(agent.id, 'done');
   const summary = extractSummary(stage, result.content);
 
-  if (result.error) addLog(agent, dept, result.error, 'warning');
-
-  saveStageOutput(stage, agent, result.content, summary, 'done', elapsedMs);
-  addLog(agent, dept, `「${STAGE_LABELS[stage]}」完成 (${elapsedMs}ms${result.mock ? ' · 模拟' : ''})`, 'success');
+  saveStageOutput(stage, agent, result.content, summary, 'done', elapsedMs, source);
+  addLog(agent, dept, `「${STAGE_LABELS[stage]}」完成 (${elapsedMs}ms${source === 'demo' ? ' · 演示模式' : ''})`, 'success');
   notify();
 
   return result.content;
@@ -273,7 +289,7 @@ const STAGE_DEPENDENCIES: Partial<Record<PipelineStage, PipelineStage[]>> = {
   done: ['deploy'],
 };
 
-function validatePlan(steps: PipelineStage[]): { valid: boolean; errors: string[] } {
+export function validatePlan(steps: PipelineStage[]): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   const allowed: PipelineStage[] = ['difficulty_assess', 'init', 'audit_entry', 'extract', 'content_review', 'develop', 'code_review', 'deep_audit', 'deploy', 'done'];
   if (!Array.isArray(steps) || steps.length === 0) return { valid: false, errors: ['计划阶段必须是非空数组'] };
@@ -329,7 +345,20 @@ function validatePlan(steps: PipelineStage[]): { valid: boolean; errors: string[
 }
 
 // ============ 审核打回判定 ============
-function parseReviewResult(content: string): { approved: boolean; issues: string[] } {
+// 优先解析审核员按要求输出的 JSON 结论（{"result":"approved"|"rejected","issues":[...]}），
+// 解析不到时回退为 default-deny 文本判定：必须"无拒绝词"且"有显式通过模式"才算通过。
+export function parseReviewResult(content: string): { approved: boolean; issues: string[] } {
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    const { value, success } = safeJsonParse<{ result?: string; issues?: string[] }>(jsonMatch[0], {});
+    if (success && value && (value.result === 'approved' || value.result === 'rejected')) {
+      return {
+        approved: value.result === 'approved',
+        issues: Array.isArray(value.issues) ? value.issues.slice(0, 5).map(String) : [],
+      };
+    }
+  }
+
   const hasReject = /打回|不通过|驳回|拒绝|❌/.test(content);
   const hasExplicitApprove = /(?:明确结论|审核结论|最终结论|判定)\s*[:：]?\s*(?:✅\s*)?(?:通过|approve\b)/i.test(content)
     || /^\s*(?:✅\s*)?(?:通过|approved)\s*$/im.test(content);
@@ -505,8 +534,8 @@ export async function startPipeline(userInput: string) {
       await runStage('develop', `请基于以下需求直接实现：\n\n${userInput}\n\n信息：${_state.stageOutputs.extract?.content || ''}`);
       if (aborted()) return;
 
-      addMessage('command', 'develop', 'task', '请部署');
-      await runStage('deploy', `请执行部署。任务：${userInput}`);
+      addMessage('command', 'develop', 'task', '请编写部署说明');
+      await runStage('deploy', `请编写本任务的部署说明（部署步骤、所需环境与回滚方式，不要实际执行部署）。任务：${userInput}`);
       if (aborted()) return;
 
       // 终审
@@ -527,11 +556,14 @@ export async function startPipeline(userInput: string) {
     {
       const { value: fullOutput, success } = safeJsonParse<any>(initOutput, {});
       if (success && fullOutput) {
+        // 兼容两种输出结构：提示词要求的嵌套 { plan: {...}, agents: [...] }
+        // 与模型自行输出的顶层 { summary, steps, ... }
+        const planSrc = fullOutput.plan || fullOutput;
         const plan: Plan = {
-          summary: fullOutput.summary || '',
-          steps: fullOutput.steps || [],
-          risks: fullOutput.risks || [],
-          suggestedApproach: fullOutput.suggestedApproach || '',
+          summary: planSrc.summary || '',
+          steps: planSrc.steps || [],
+          risks: planSrc.risks || [],
+          suggestedApproach: planSrc.suggestedApproach || '',
         };
         _state = { ..._state, plan };
         // P1-5: 解析 Agent Skill 动态分配
@@ -568,11 +600,12 @@ export async function startPipeline(userInput: string) {
       if (aborted()) return;
       const { value: fullOutput, success: revisedOk } = safeJsonParse<any>(revisedOutput, {});
       if (revisedOk && fullOutput) {
+        const planSrc = fullOutput.plan || fullOutput;
         const revisedPlan: Plan = {
-          summary: fullOutput.summary || '',
-          steps: fullOutput.steps || [],
-          risks: fullOutput.risks || [],
-          suggestedApproach: fullOutput.suggestedApproach || '',
+          summary: planSrc.summary || '',
+          steps: planSrc.steps || [],
+          risks: planSrc.risks || [],
+          suggestedApproach: planSrc.suggestedApproach || '',
         };
         _state = { ..._state, plan: revisedPlan };
         if (fullOutput.agents && Array.isArray(fullOutput.agents)) {
@@ -624,13 +657,13 @@ export async function startPipeline(userInput: string) {
           await runStage('done', `请汇总本次任务执行情况并交付：\n\n需求：${userInput}\n\n各阶段摘要：\n${stageSummary}${auditInfo}`);
         } else if (step === 'content_review') {
           if (!_state.stageOutputs.extract?.content) throw new Error('缺少待审核的信息提取结果');
-          const output = await runStage('content_review', `请审核以下信息提取结果：\n\n${_state.stageOutputs.extract.content}`);
+          const output = await runStage('content_review', `请审核以下信息提取结果：\n\n${_state.stageOutputs.extract.content}\n\n【输出要求】先给出审核分析，最后一行输出 JSON 结论：{"result":"approved"或"rejected","issues":["问题"]}`);
           const result = parseReviewResult(output);
           if (!result.approved) throw new Error(`内容审核未明确通过：${result.issues.join('；')}`);
           contentApproved = true;
         } else if (step === 'code_review') {
           if (!_state.stageOutputs.develop?.content) throw new Error('缺少待审核的开发产出');
-          const output = await runStage('code_review', `请审核以下开发产出：\n\n${_state.stageOutputs.develop.content}`);
+          const output = await runStage('code_review', `请审核以下开发产出：\n\n${_state.stageOutputs.develop.content}\n\n【输出要求】先给出审核分析，最后一行输出 JSON 结论：{"result":"approved"或"rejected","issues":["问题"]}`);
           const result = parseReviewResult(output);
           if (!result.approved) throw new Error(`代码审核未明确通过：${result.issues.join('；')}`);
           codeApproved = true;
@@ -647,21 +680,13 @@ export async function startPipeline(userInput: string) {
           if (_state.difficulty === 'complex' && !deepAuditPassed) {
             throw new Error('复杂任务必须通过深度审计后才能部署');
           }
-          let deploySuccess = false;
-          for (let attempt = 0; attempt < 2 && !deploySuccess; attempt++) {
-            if (aborted()) return;
-            if (attempt > 0) addLog(pickAgent('develop'), 'develop', '部署重试第 1 次', 'warning');
-            await runStage('deploy', `请执行部署。任务：${userInput}\n\n上下文：\n${ctx}`);
-            const deployOut = _state.stageOutputs.deploy?.content || '';
-            deploySuccess = /部署成功|✓ 部署成功|部署完成/i.test(deployOut);
-            if (!deploySuccess && attempt === 1) {
-              addLog(pickAgent('develop'), 'develop', '部署重试仍失败，暂停汇报', 'error');
-              _state = { ..._state, paused: true, errors: [..._state.errors, '部署失败'] };
-              notify();
-              await waitIfPaused();
-              if (aborted()) return;
-            }
+          // 未接入部署执行器：本阶段仅产出部署说明存档，不判定"已部署"
+          await runStage('deploy', `请编写本任务的部署说明（部署步骤、所需环境与回滚方式，不要实际执行部署）。任务：${userInput}\n\n上下文：\n${ctx}`);
+          if (_state.stageOutputs.deploy?.source === 'live') {
+            addLog(pickAgent('develop'), 'develop', '部署执行器未接入，以上产出仅为部署说明，不视为已部署', 'warning');
+            recordMonitorEvent('framework_phase', 'develop', pickAgent('develop').name, '部署执行器未接入，仅生成部署说明');
           }
+          notify();
         } else {
           await runStage(step, ctx);
         }
@@ -688,7 +713,7 @@ export async function startPipeline(userInput: string) {
         if (aborted()) return;
 
         addMessage('info', 'review', 'result', '信息提取完成，待内容审核');
-        const reviewOutput = await runStage('content_review', `请审核以下信息提取结果的准确性：\n\n${extractOutput}`);
+        const reviewOutput = await runStage('content_review', `请审核以下信息提取结果的准确性：\n\n${extractOutput}\n\n【输出要求】先给出审核分析，最后一行输出 JSON 结论：{"result":"approved"或"rejected","issues":["问题"]}`);
         if (aborted()) return;
 
         const { approved, issues } = parseReviewResult(reviewOutput);
@@ -712,6 +737,10 @@ export async function startPipeline(userInput: string) {
             notify();
             await waitIfPaused();
             if (aborted()) return;
+            // 恢复 = 重试审核循环（重新计数）；放弃请点「停止」
+            extractAttempts = 0;
+            _state = { ..._state, contentRejectCount: 0 };
+            notify();
           }
         }
       }
@@ -730,7 +759,7 @@ export async function startPipeline(userInput: string) {
         if (aborted()) return;
 
         addMessage('develop', 'review', 'result', '编码完成，待代码审核');
-        const codeReviewOutput = await runStage('code_review', `请审核以下代码：\n\n${devOutput}`);
+        const codeReviewOutput = await runStage('code_review', `请审核以下代码：\n\n${devOutput}\n\n【输出要求】先给出审核分析，最后一行输出 JSON 结论：{"result":"approved"或"rejected","issues":["问题"]}`);
         if (aborted()) return;
 
         const { approved, issues } = parseReviewResult(codeReviewOutput);
@@ -764,6 +793,10 @@ export async function startPipeline(userInput: string) {
             notify();
             await waitIfPaused();
             if (aborted()) return;
+            // 恢复 = 重试审核循环（重新计数）；放弃请点「停止」
+            devAttempts = 0;
+            _state = { ..._state, codeRejectCount: 0 };
+            notify();
           }
         }
       }
@@ -772,23 +805,15 @@ export async function startPipeline(userInput: string) {
       // 第五步：终审与交付
       // ========================================================
       if (aborted()) return;
-      addMessage('command', 'develop', 'task', '请执行部署');
-      let deploySuccess = false;
-      for (let attempt = 0; attempt < 2 && !deploySuccess; attempt++) {
-        if (aborted()) return;
-        if (attempt > 0) addLog(pickAgent('develop'), 'develop', '部署重试第 1 次', 'warning');
-        await runStage('deploy', `请执行部署。任务：${userInput}\n\n代码：${_state.stageOutputs.develop?.content || ''}`);
-        const deployOut = _state.stageOutputs.deploy?.content || '';
-        deploySuccess = /部署成功|✓ 部署成功|部署完成/i.test(deployOut);
-        if (!deploySuccess && attempt === 1) {
-          addLog(pickAgent('develop'), 'develop', '部署重试仍失败，暂停汇报', 'error');
-          _state = { ..._state, paused: true, errors: [..._state.errors, '部署失败'] };
-          notify();
-          await waitIfPaused();
-          if (aborted()) return;
-        }
+      addMessage('command', 'develop', 'task', '请编写部署说明');
+      // 未接入部署执行器：本阶段仅产出部署说明存档，不判定"已部署"
+      await runStage('deploy', `请编写本任务的部署说明（部署步骤、所需环境与回滚方式，不要实际执行部署）。任务：${userInput}\n\n代码：${_state.stageOutputs.develop?.content || ''}`);
+      if (_state.stageOutputs.deploy?.source === 'live') {
+        addLog(pickAgent('develop'), 'develop', '部署执行器未接入，以上产出仅为部署说明，不视为已部署', 'warning');
+        recordMonitorEvent('framework_phase', 'develop', pickAgent('develop').name, '部署执行器未接入，仅生成部署说明');
       }
-      addMessage('develop', 'command', 'result', deploySuccess ? '部署成功' : '部署失败');
+      addMessage('develop', 'command', 'result', '部署说明已生成（未接入部署执行器，不视为已部署）');
+      notify();
 
       // done
       if (aborted()) return;
@@ -804,15 +829,23 @@ export async function startPipeline(userInput: string) {
     }
 
   } catch (err: any) {
-    const msg = err?.message || String(err);
-    _state = {
-      ..._state,
-      errors: [..._state.errors, msg],
-      log: [..._state.log, {
+    // 用户主动停止：静默收尾，不算异常
+    if (err?.name === 'AbortError') {
+      _state = { ..._state, log: [..._state.log, {
         time: new Date().toISOString(), agentId: '', department: 'command',
-        message: `流水线异常：${msg}`, type: 'error',
-      }],
-    };
+        message: '任务已被用户停止', type: 'warning',
+      }] };
+    } else {
+      const msg = err?.message || String(err);
+      _state = {
+        ..._state,
+        errors: [..._state.errors, msg],
+        log: [..._state.log, {
+          time: new Date().toISOString(), agentId: '', department: 'command',
+          message: `流水线异常：${msg}`, type: 'error',
+        }],
+      };
+    }
   } finally {
     _state = { ..._state, isRunning: false };
     _abortController = null;
@@ -835,8 +868,11 @@ export function resume() {
 }
 
 export function stop() {
+  // 只中止信号并解除暂停，不立刻清 isRunning：
+  // 旧任务会因请求被 abort 而快速收尾（finally 统一置 isRunning=false），
+  // 避免"停止后立即开新任务"时旧异步链读到新任务的控制器/状态（并发竞态）。
   _abortController?.abort();
-  _state = { ..._state, paused: false, isRunning: false };
+  _state = { ..._state, paused: false };
   _pausedResolve?.();
   _pausedResolve = null;
   clearSession(_state.taskId);
@@ -894,6 +930,19 @@ async function _persist(action: PersistAction, payload?: any) {
   } catch {
     // 持久化失败不阻塞流水线
   }
+}
+
+// ============ 任务成功判定（结构化） ============
+// 不再以 errors.length 为准：只要存在失败阶段就算失败；
+// demoUsed 标记本次任务是否依赖演示模式产出。
+export function computeTaskSuccess(s: PipelineState): boolean {
+  const outputs = Object.values(s.stageOutputs);
+  if (outputs.length === 0) return false;
+  return outputs.every(o => o.status !== 'error');
+}
+
+export function taskUsedDemo(s: PipelineState): boolean {
+  return Object.values(s.stageOutputs).some(o => o.source === 'demo');
 }
 
 // ============ ReviewEngine 类包装 ============

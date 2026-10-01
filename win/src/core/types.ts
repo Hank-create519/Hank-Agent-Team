@@ -164,7 +164,7 @@ export interface DifficultyAssessment {
 export interface MonitorEvent {
   id: string;
   time: string;
-  type: 'dept_message' | 'review_opinion' | 'difficulty_assess' | 'framework_phase' | 'user_intervention' | 'retry_attempt' | 'context_truncated' | 'plan_validation';
+  type: 'dept_message' | 'review_opinion' | 'difficulty_assess' | 'framework_phase' | 'user_intervention' | 'retry_attempt' | 'context_truncated' | 'plan_validation' | 'api_failure';
   department: Department;
   agentName: string;
   content: string;
@@ -207,6 +207,9 @@ export interface StageOutput {
   content: string;       // 原始产出文本
   summary: string;       // 一句话摘要
   status: 'running' | 'done' | 'error';
+  // 产出来源：live = 真实 LLM 调用；demo = 演示模式/mock 文案。
+  // 门禁判定只接受 live 产出的"成功"，demo 仅用于无 Key 演示。
+  source: 'live' | 'demo';
   elapsedMs: number;
   timestamp: string;
 }

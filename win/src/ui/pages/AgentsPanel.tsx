@@ -48,23 +48,55 @@ const ModelRegistry: React.FC<{
   const [testStatus, setTestStatus] = useState<Record<string, 'testing' | 'ok' | 'fail' | null>>({});
   const [testError, setTestError] = useState<Record<string, string>>({});
 
+  // 连接测试：按模型 provider 选择对应协议（与 llm.ts 的路由保持一致），
+  // 避免用 OpenAI 兼容接口误测 Anthropic / Google 的 Key。
   const handleTest = async (agent: Agent, model: ModelConfig) => {
     setTestStatus((prev) => ({ ...prev, [agent.id]: 'testing' }));
     try {
-      const baseUrl = agent.baseUrl || 'https://api.openai.com/v1';
-      const url = baseUrl.replace(/\/+$/, '') + '/chat/completions';
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${agent.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: model.id,
-          messages: [{ role: 'user', content: 'ping' }],
-          max_tokens: 1,
-        }),
-      });
+      const provider = model?.provider || '';
+      let res: Response;
+
+      if (provider === 'Anthropic') {
+        const baseUrl = (agent.baseUrl || 'https://api.anthropic.com/v1').replace(/\/+$/, '');
+        res = await fetch(baseUrl + '/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': agent.apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: model.id,
+            messages: [{ role: 'user', content: 'ping' }],
+            max_tokens: 1,
+          }),
+        });
+      } else if (provider === 'Google') {
+        const baseUrl = (agent.baseUrl || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
+        res = await fetch(`${baseUrl}/v1beta/models/${model.id}:generateContent?key=${agent.apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
+            generationConfig: { maxOutputTokens: 1 },
+          }),
+        });
+      } else {
+        const baseUrl = (agent.baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
+        res = await fetch(baseUrl + '/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${agent.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: model.id,
+            messages: [{ role: 'user', content: 'ping' }],
+            max_tokens: 1,
+          }),
+        });
+      }
+
       if (res.ok) {
         setTestStatus((prev) => ({ ...prev, [agent.id]: 'ok' }));
       } else {

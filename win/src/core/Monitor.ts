@@ -40,7 +40,7 @@ export function getProgressReport(state: PipelineState): string {
     develop: '开发编码（开发部）',
     code_review: '代码审核（审核部）',
     deep_audit: '系统级深度审计（审核部）',
-    deploy: '部署上线（开发部）',
+    deploy: '部署说明（开发部）',
     done: '完成交付（指挥部）',
   };
 

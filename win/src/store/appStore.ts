@@ -52,6 +52,8 @@ export interface HistoryItem {
   contentRejectCount: number;
   codeRejectCount: number;
   success: boolean;
+  // 是否使用了演示模式（未配置 Key / mock 产出）
+  demoUsed?: boolean;
   createdAt: string;
   summary: string;
   reviewReport?: any;

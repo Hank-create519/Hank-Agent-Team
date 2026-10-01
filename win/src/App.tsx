@@ -19,9 +19,23 @@ import {
   pause,
   resume,
   stop,
+  setPersistHandler,
+  computeTaskSuccess,
+  taskUsedDemo,
 } from './core/Engine';
 import { useAppStore, subscribeConfigSync } from './store/appStore';
 import type { HistoryItem } from './store/appStore';
+
+// 阶段产出持久化：通过主进程 IPC 原子写入 userData（无 IPC 环境下静默跳过）
+setPersistHandler(async (action, payload) => {
+  const api = (window as unknown as { electronAPI?: { persistSave?: (a: string, p: unknown) => Promise<boolean> } }).electronAPI;
+  if (!api?.persistSave) return;
+  try {
+    await api.persistSave(action, payload);
+  } catch {
+    // 持久化失败不阻塞流水线（引擎侧亦兜底）
+  }
+});
 
 // 窗口拖拽区域辅助（Electron 专用；浏览器环境下无效，无副作用）
 const dragRegion = (value: string) =>
@@ -135,7 +149,8 @@ const App: React.FC = () => {
             reviewAuditCount: s.reviewAuditCount,
             contentRejectCount: s.contentRejectCount,
             codeRejectCount: s.codeRejectCount,
-            success: s.errors.length === 0,
+            success: computeTaskSuccess(s),
+            demoUsed: taskUsedDemo(s),
             createdAt: new Date().toISOString(),
             summary: s.stageOutputs.done?.summary || '任务完成',
             reviewReport: report || null,
@@ -158,7 +173,7 @@ const App: React.FC = () => {
           setBatchQueue((prev2) => {
             const done = prev2.map((b) =>
               b.id === nextQueued.id
-                ? { ...b, status: (s.stage === 'done' && s.errors.length === 0 ? 'done' : 'failed') as 'done' | 'failed' }
+                ? { ...b, status: (computeTaskSuccess(s) ? 'done' : 'failed') as 'done' | 'failed' }
                 : b
             );
             return done;
@@ -308,7 +323,8 @@ const App: React.FC = () => {
           reviewAuditCount: s.reviewAuditCount,
           contentRejectCount: s.contentRejectCount,
           codeRejectCount: s.codeRejectCount,
-          success: s.errors.length === 0,
+          success: computeTaskSuccess(s),
+            demoUsed: taskUsedDemo(s),
           createdAt: new Date().toISOString(),
           summary: s.stageOutputs.done?.summary || '任务完成',
           reviewReport: report || null,
@@ -330,7 +346,8 @@ const App: React.FC = () => {
           });
         } catch (_) { /* ignore */ }
       }
-      if (!getState().isRunning && getState().errors.length > 0 && getState().taskId) {
+      // 停止/取消（stage 非 done 且无错误）也要清理订阅，避免泄漏
+      if (!getState().isRunning && getState().taskId) {
         origUnsub();
       }
     });

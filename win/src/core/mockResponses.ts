@@ -145,7 +145,7 @@ export function mockResponse(stage: PipelineStage, userInput: string): string {
         '$ asar pack dist → app.asar',
         '✓ 打包完成',
         '',
-        '✓ 部署成功',
+        '✓ 部署说明已生成（演示模式，未实际部署）',
       ].join('\n');
 
     case 'done':
@@ -190,7 +190,7 @@ export function mockSummary(stage: PipelineStage): string {
     develop: '编码完成，队长自检通过',
     code_review: '代码审核通过，未发现漏洞',
     deep_audit: '系统级深度审计完成',
-    deploy: '部署成功，重试 0 次',
+    deploy: '部署说明已生成（演示模式，未实际部署）',
     done: '全部阶段完成，任务交付',
   };
   return map[stage] ?? '完成';
@@ -308,6 +308,6 @@ export const mockSummaryExtended: Record<string, string> = {
   develop: '编码完成，队长自检通过',
   code_review: '代码审核通过',
   deep_audit: '系统级深度审计完成',
-  deploy: '部署成功',
+  deploy: '部署说明已生成（演示模式，未实际部署）',
   done: '任务交付完成',
 };
