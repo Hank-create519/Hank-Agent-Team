@@ -6,7 +6,8 @@
 //   - 成功判定必须包含 done 阶段；demo 产出单独标记
 // ============================================================
 import { describe, it, expect } from 'vitest';
-import { parseReviewResult, validatePlan, computeTaskOutcome } from '../Engine';
+import { parseReviewResult, validatePlan, computeTaskOutcome, sliceCodePointSafe } from '../Engine';
+import { safeJsonParse } from '../llm';
 import { assessDifficulty } from '../difficultyRouter';
 import { createInitialState } from '../Pipeline';
 import type { Agent, PipelineState } from '../types';
@@ -192,5 +193,39 @@ describe('assessDifficulty（难度评估降级保护，V2.0.2）', () => {
     const r = await assessDifficulty('请做系统设计和多模块集成', noKeyAgent, [], undefined);
     expect(r.degraded).toBe(true);
     expect(r.difficulty).toBe('complex');
+  });
+});
+
+describe('safeJsonParse（LLM JSON 容错，V2.0.3）', () => {
+  it('单引号字符串 → 可解析', () => {
+    const { success, value } = safeJsonParse<any>("{'result':'approved'}", null);
+    expect(success).toBe(true);
+    expect(value.result).toBe('approved');
+  });
+
+  it('undefined 值 → 解析为 null', () => {
+    const { success, value } = safeJsonParse<any>('{"a": undefined}', null);
+    expect(success).toBe(true);
+    expect(value.a).toBeNull();
+  });
+
+  it('URL 里的 // 不被当注释吞掉', () => {
+    const { success, value } = safeJsonParse<any>('{"url":"https://example.com"} // 注释', null);
+    expect(success).toBe(true);
+    expect(value.url).toBe('https://example.com');
+  });
+});
+
+describe('sliceCodePointSafe（UTF-8 码点安全截断，V2.0.3）', () => {
+  it('不在代理对中间切开 emoji', () => {
+    const s = 'abc🎉def';
+    // 从 emoji 两个码元中间切开也应返回合法字符串
+    const cut = sliceCodePointSafe(s, 0, 4);
+    expect(cut).toBe('abc');
+    expect(Array.from(cut).length).toBe(3);
+  });
+
+  it('常规 ASCII 切片不受影响', () => {
+    expect(sliceCodePointSafe('hello world', 0, 5)).toBe('hello');
   });
 });

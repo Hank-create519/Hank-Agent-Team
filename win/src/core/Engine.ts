@@ -180,6 +180,15 @@ function recordMonitorEvent(
   _state = { ..._state, monitorEvents: [..._state.monitorEvents, evt].slice(-300) };
 }
 
+// 码点安全切片：避免把 emoji 等代理对从中间切开产生乱码
+export function sliceCodePointSafe(str: string, start: number, end: number): string {
+  let s = Math.max(0, Math.min(start, str.length));
+  let e = Math.max(s, Math.min(end, str.length));
+  while (s < e && str.charCodeAt(s) >= 0xDC00 && str.charCodeAt(s) <= 0xDFFF) s++;
+  while (e > s && str.charCodeAt(e - 1) >= 0xD800 && str.charCodeAt(e - 1) <= 0xDBFF) e--;
+  return str.slice(s, e);
+}
+
 // 暂停门控
 async function waitIfPaused() {
   while (_state.paused) {
@@ -196,12 +205,12 @@ async function runStage(stage: PipelineStage, userPrompt: string, opts?: { force
   await waitIfPaused();
   if (aborted()) return '';
 
-  // 上下文窗口溢出保护：超出阈值时保留头部 + 尾部
+  // 上下文窗口溢出保护：超出阈值时保留头部 + 尾部（码点安全，不切开代理对）
   const MAX_PROMPT_LEN = 32000; // 保守值，约 8000 tokens
   let finalPrompt = userPrompt;
   if (userPrompt.length > MAX_PROMPT_LEN) {
-    const head = userPrompt.slice(0, MAX_PROMPT_LEN * 2 / 3);
-    const tail = userPrompt.slice(-MAX_PROMPT_LEN / 3);
+    const head = sliceCodePointSafe(userPrompt, 0, Math.floor(MAX_PROMPT_LEN * 2 / 3));
+    const tail = sliceCodePointSafe(userPrompt, userPrompt.length - Math.floor(MAX_PROMPT_LEN / 3), userPrompt.length);
     finalPrompt = head + '\n\n[中间内容已截断...]\n\n' + tail;
     addLog(null, STAGE_DEPT[stage],
       `[上下文截断] ${stage} 阶段输入从 ${userPrompt.length} 截断至 ${finalPrompt.length} 字符`, 'warning');

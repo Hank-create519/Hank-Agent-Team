@@ -175,10 +175,11 @@ async function callGoogle(
   systemPrompt: string, userPrompt: string,
   signal?: AbortSignal,
 ): Promise<{ content: string; retryCount: number }> {
-  const url = `${baseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  // Key 走请求头而非 URL query：避免 Key 进入服务端/代理日志与浏览器历史
+  const url = `${baseUrl}/v1beta/models/${model}:generateContent`;
   const { response: res, retryCount } = await fetchWithRetry(() => fetchWithTimeout(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify({
       system_instruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
@@ -495,7 +496,8 @@ async function callGoogleRaw(
     parts: [{ text: m.content || '' }],
   }));
 
-  const url = `${baseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  // Key 走请求头而非 URL query（同 callGoogle）
+  const url = `${baseUrl}/v1beta/models/${model}:generateContent`;
   const body: any = {
     contents,
     generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
@@ -504,7 +506,7 @@ async function callGoogleRaw(
 
   const res = await fetchWithTimeout(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify(body),
   }, 60000);
 
@@ -593,10 +595,29 @@ export function safeJsonParse<T>(raw: string, fallback: T): { value: T; success:
   // 剥离 ```json ... ``` 包裹
   const codeBlock = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
   if (codeBlock) cleaned = codeBlock[1].trim();
-  // 修复尾部逗号
-  cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+
+  // 第 1 遍：原样解析
   try {
     return { value: JSON.parse(cleaned) as T, success: true };
+  } catch { /* 进入修复流程 */ }
+
+  // 第 2 遍：修复尾部逗号
+  const noTrailingComma = cleaned.replace(/,(\s*[}\]])/g, '$1');
+  try {
+    return { value: JSON.parse(noTrailingComma) as T, success: true };
+  } catch { /* 进入修复流程 */ }
+
+  // 第 3 遍：LLM 常见 JSON 错误容错——
+  //   a) 去掉 // 注释（负向断言避开 https:// 里的斜杠）与 /* */ 块注释
+  //   b) undefined → null
+  //   c) 单引号字符串 → 双引号
+  const relaxed = noTrailingComma
+    .replace(/(?<!https?:)\/\/[^\n\r]*/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/:\s*undefined\b/g, ': null')
+    .replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, '"$1"');
+  try {
+    return { value: JSON.parse(relaxed) as T, success: true };
   } catch {
     console.warn('[safeJsonParse] 解析失败, 原始片段:', cleaned.slice(0, 200));
     return { value: fallback, success: false };

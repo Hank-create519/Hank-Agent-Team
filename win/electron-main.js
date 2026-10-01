@@ -79,21 +79,19 @@ ipcMain.handle('window-is-maximized', (event) => {
 
 // ==================== 受限 exec（仅允许 git 命令，供 GitPanel 使用） ====================
 // 使用 execFile 而非 exec：不经过 shell，参数逐项传递，避免命令注入。
-// 支持两种入参：'git status' 字符串（按空白拆分）或 ['git','diff','--',path] 数组（推荐）。
+// 仅接受数组格式 ['git', ...args]（字符串模式已移除：空白拆分会破坏含空格路径）。
 ipcMain.handle('exec', async (event, command) => {
-  let args;
-  if (Array.isArray(command)) {
-    if (command.length === 0 || command[0] !== 'git') {
-      throw new Error('仅允许执行 git 命令');
-    }
-    args = command.slice(1).map(String);
-  } else {
-    const parts = String(command || '').trim().split(/\s+/);
-    if (parts.length === 0 || parts[0] !== 'git') {
-      throw new Error('仅允许执行 git 命令');
-    }
-    args = parts.slice(1);
+  if (!Array.isArray(command) || command.length === 0 || command[0] !== 'git') {
+    throw new Error('仅允许执行 git 命令（数组格式）');
   }
+  if (command.length > 20) {
+    throw new Error('参数数量超出限制');
+  }
+  const args = command.slice(1).map((arg) => {
+    const str = String(arg);
+    if (str.length > 500) throw new Error('单个参数长度超出限制');
+    return str;
+  });
   return new Promise((resolve) => {
     execFile('git', args, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
       // git diff 在无差异时以非零码退出，但仍需返回 stdout
