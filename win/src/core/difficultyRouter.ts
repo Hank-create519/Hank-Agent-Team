@@ -31,10 +31,26 @@ function quickAssess(input: string): Difficulty | null {
   return null;
 }
 
+// 降级保护：关键词兜底（degraded）不得降低审核强度——simple 一律提升为 medium。
+// 非 degraded 的快速预判（<10 字符问候/超短输入）不受影响。
+function degradeGuard(a: DifficultyAssessment): DifficultyAssessment {
+  if (a.degraded && a.difficulty === 'simple') {
+    return {
+      ...a,
+      difficulty: 'medium',
+      enableReviewFramework: true,
+      estimatedRounds: 1,
+      reason: a.reason + '（降级保护：不低于中等档）',
+    };
+  }
+  return a;
+}
+
 /**
  * assessDifficulty: 评估任务难度
  * 
  * 先快速预判，简单任务直接返回；否则调用指挥部 Agent 的 LLM 进行判定。
+ * 任何降级路径（无 Key / API 失败）都经过 degradeGuard，不会关闭审核框架。
  */
 export async function assessDifficulty(
   userInput: string,
@@ -53,9 +69,9 @@ export async function assessDifficulty(
     };
   }
 
-  // 无 API Key 时使用基于关键词的中等判定
+  // 无 API Key 时使用基于关键词的中等判定（降级保护：不低于中等档）
   if (!commandAgent.apiKey) {
-    return keywordAssessment(userInput);
+    return degradeGuard(keywordAssessment(userInput));
   }
 
   // 调用 LLM 判定
@@ -69,9 +85,9 @@ export async function assessDifficulty(
 
     const content = result.content;
 
-    // 真实调用失败（不再降级 mock）→ 关键词兜底
+    // 真实调用失败（不再降级 mock）→ 关键词兜底（降级保护：不低于中等档）
     if (result.status === 'failed' || !content) {
-      return keywordAssessment(userInput);
+      return degradeGuard(keywordAssessment(userInput));
     }
 
     // 解析档位
@@ -88,8 +104,8 @@ export async function assessDifficulty(
 
     return { difficulty, reason, estimatedRounds, enableReviewFramework: enableReview };
   } catch {
-    // LLM 调用失败 → 关键词兜底
-    return keywordAssessment(userInput);
+    // LLM 调用失败 → 关键词兜底（降级保护：不低于中等档）
+    return degradeGuard(keywordAssessment(userInput));
   }
 }
 

@@ -268,6 +268,8 @@ const WARN_AT = 10;
 
 /**
  * 带 Function Calling 的 LLM 调用。
+ * ⚠️ 当前未接入主流程（主引擎只使用 callLLM）；工具执行体是占位模拟，
+ * 任何经工具循环的产出一律标记 status='demo'，不得冒充真实执行。
  * 当模型返回 tool_calls 时执行工具并将结果注入消息循环，
  * 最多迭代 MAX_ITERATIONS 轮，超限强制模型输出文本。
  */
@@ -324,7 +326,8 @@ export async function callAIWithTools(
           const finalContent = await rawChatCompletion(
             provider, baseUrl, agent.apiKey, agent.model, localMessages, controller.signal,
           );
-          return { content: finalContent || '[工具循环耗尽]', elapsedMs: Date.now() - start, mock: false, retryCount: 0, status: 'live' };
+          // 经过了模拟工具循环：产出不可视为真实执行结果
+          return { content: finalContent || '[工具循环耗尽]', elapsedMs: Date.now() - start, mock: false, retryCount: 0, status: 'demo' };
         }
       }
 
@@ -384,7 +387,7 @@ export async function callAIWithTools(
       }
     }
 
-    return { content: '[工具循环耗尽]', elapsedMs: Date.now() - start, mock: false, retryCount: 0, status: 'live' };
+    return { content: '[工具循环耗尽]', elapsedMs: Date.now() - start, mock: false, retryCount: 0, status: 'demo' };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return {

@@ -36,9 +36,22 @@ function createWindow() {
   win.on('unmaximize', () => win.webContents.send('window-maximized-change', false));
 
   // 安全边界：禁止渲染进程打开新窗口或导航到未知目标（防注入后外跳）
+  // 白名单用 URL 解析后精确匹配协议/主机/端口，避免 startsWith 前缀绕过：
+  //   生产：仅允许应用自身打包资源（file:）
+  //   开发：额外允许 Vite Dev Server（http://localhost:5173 精确匹配）
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event, url) => {
-    const allowed = url.startsWith('file://') || url.startsWith('http://localhost:5173');
+    let allowed = false;
+    try {
+      const u = new URL(url);
+      if (app.isPackaged) {
+        allowed = u.protocol === 'file:';
+      } else {
+        allowed = (u.protocol === 'http:' && u.hostname === 'localhost' && u.port === '5173');
+      }
+    } catch {
+      allowed = false;
+    }
     if (!allowed) event.preventDefault();
   });
 

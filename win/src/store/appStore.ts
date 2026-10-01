@@ -56,6 +56,8 @@ export interface HistoryItem {
   outcome?: 'completed' | 'demo' | 'incomplete' | 'failed' | 'cancelled';
   // 是否使用了演示模式（未配置 Key / mock 产出）
   demoUsed?: boolean;
+  // 难度评估是否走了降级（LLM 失败 → 关键词兜底，审核强度可能失真）
+  difficultyDegraded?: boolean;
   createdAt: string;
   summary: string;
   reviewReport?: any;

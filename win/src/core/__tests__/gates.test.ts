@@ -7,8 +7,9 @@
 // ============================================================
 import { describe, it, expect } from 'vitest';
 import { parseReviewResult, validatePlan, computeTaskOutcome } from '../Engine';
+import { assessDifficulty } from '../difficultyRouter';
 import { createInitialState } from '../Pipeline';
-import type { PipelineState } from '../types';
+import type { Agent, PipelineState } from '../types';
 
 describe('parseReviewResult（审核打回判定）', () => {
   it('JSON 结论 approved → 通过', () => {
@@ -158,5 +159,38 @@ describe('computeTaskOutcome（任务终态判定）', () => {
 
   it('无任何阶段产出 → incomplete', () => {
     expect(computeTaskOutcome(createInitialState())).toBe('incomplete');
+  });
+
+  it('done 阶段非终态（running）→ incomplete（V2.0.2 回归项）', () => {
+    const s = stateWith('develop', 'done');
+    const s2 = {
+      ...s,
+      stageOutputs: {
+        ...s.stageOutputs,
+        done: {
+          stage: 'done', agentId: 'a', agentName: 'A', department: 'command',
+          content: '', summary: '', status: 'running', source: 'live', elapsedMs: 1,
+          timestamp: new Date().toISOString(),
+        },
+      },
+    } as PipelineState;
+    expect(computeTaskOutcome(s2)).toBe('incomplete');
+  });
+});
+
+describe('assessDifficulty（难度评估降级保护，V2.0.2）', () => {
+  const noKeyAgent = { apiKey: '', department: 'command', role: 'leader' } as Agent;
+
+  it('API 无 Key 降级：simple 判定提升为 medium（不得降低审核强度）', async () => {
+    const r = await assessDifficulty('帮我快速修改一下这个格式', noKeyAgent, [], undefined);
+    expect(r.degraded).toBe(true);
+    expect(r.difficulty).toBe('medium');
+    expect(r.enableReviewFramework).toBe(true);
+  });
+
+  it('API 无 Key 降级：complex 判定保持 complex', async () => {
+    const r = await assessDifficulty('请做系统设计和多模块集成', noKeyAgent, [], undefined);
+    expect(r.degraded).toBe(true);
+    expect(r.difficulty).toBe('complex');
   });
 });

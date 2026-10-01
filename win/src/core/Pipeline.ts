@@ -174,6 +174,8 @@ export function createInitialState(): PipelineState {
     monitorEvents: [],
     reviewAuditCount: 0,
     runMode: 'live',
+    pauseReason: undefined,
+    difficultyDegraded: false,
   };
 }
 

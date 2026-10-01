@@ -250,6 +250,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
                   background: 'rgba(150,150,160,0.15)', color: 'var(--text-tertiary)',
                 }}>取消</span>
               )}
+              {item.difficultyDegraded && (
+                <span style={{
+                  fontSize: 9, padding: '1px 5px', borderRadius: 4, flexShrink: 0,
+                  background: 'rgba(250,179,21,0.15)', color: '#e2a336',
+                }} title="难度评估降级：LLM 调用失败，使用关键词兜底判定">降级</span>
+              )}
               <span style={{ fontSize: 10, color: 'var(--text-tertiary)', flexShrink: 0 }}>{timeLabel}</span>
             </button>
           );

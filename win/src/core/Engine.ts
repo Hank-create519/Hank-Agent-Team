@@ -244,6 +244,7 @@ async function runStage(stage: PipelineStage, userPrompt: string, opts?: { force
     addLog(agent, dept, `LLM 调用失败：${result.error || '未知错误'}。已暂停 —— 点击「继续」重试本阶段，或「停止」结束任务。`, 'error');
     recordMonitorEvent('api_failure', dept, agent.name,
       `「${STAGE_LABELS[stage]}」真实调用失败，暂停等待处理`, { stage, error: result.error });
+    _state = { ..._state, paused: true, pauseReason: 'api-retry' };
     notify();
     await waitIfPaused();
     if (aborted()) throw new DOMException('Aborted', 'AbortError');
@@ -501,6 +502,8 @@ export async function startPipeline(userInput: string) {
     reviewAuditCount: 0,
     // 运行模式：全员无 Key = 演示任务；live 任务中 demo 来源产出不得通过门禁
     runMode: _state.agents.some(a => a.apiKey) ? 'live' : 'demo',
+    pauseReason: undefined,
+    difficultyDegraded: false,
   };
 
   _state = { ..._state, agents: _state.agents.map(a => ({ ...a, status: 'idle', currentTask: '' })) };
@@ -520,10 +523,11 @@ export async function startPipeline(userInput: string) {
     if (aborted()) return;
 
     if (assessment.degraded) {
-      addLog(cmdAgent, 'command', '难度评估降级：LLM 调用失败，已使用关键词兜底判定（本次审核强度可能与预期不符）', 'warning');
+      addLog(cmdAgent, 'command', '难度评估降级：LLM 调用失败，已使用关键词兜底判定（审核强度不低于中等档）', 'warning');
       recordMonitorEvent('difficulty_assess', 'command', cmdAgent.name,
         '难度评估降级：API 失败，使用关键词兜底', { degraded: true, difficulty: assessment.difficulty });
     }
+    _state.difficultyDegraded = !!assessment.degraded;
     _state.difficulty = assessment.difficulty;
     _state.difficultyReason = assessment.reason;
     setAgentStatus(cmdAgent.id, 'done');
@@ -652,7 +656,7 @@ export async function startPipeline(userInput: string) {
     if (!planAccepted) {
       // 恢复 = 人工确认接受当前方案继续；放弃请停止任务
       addLog(null, 'command', '方案审查连续两轮未通过，自动暂停等待人工确认', 'error');
-      _state = { ..._state, paused: true };
+      _state = { ..._state, paused: true, pauseReason: 'plan-review' };
       notify();
       await waitIfPaused();
       if (aborted()) return;
@@ -769,7 +773,7 @@ export async function startPipeline(userInput: string) {
               if (aborted()) return;
             }
             addLog(pickAgent('command'), 'command', '内容审核打回超过 3 次，自动暂停', 'error');
-            _state = { ..._state, paused: true };
+            _state = { ..._state, paused: true, pauseReason: 'retry-limit' };
             notify();
             await waitIfPaused();
             if (aborted()) return;
@@ -825,7 +829,7 @@ export async function startPipeline(userInput: string) {
           notify();
           if (_state.codeRejectCount >= 3) {
             addLog(pickAgent('command'), 'command', '代码审核打回超过 3 次，自动暂停', 'error');
-            _state = { ..._state, paused: true };
+            _state = { ..._state, paused: true, pauseReason: 'retry-limit' };
             notify();
             await waitIfPaused();
             if (aborted()) return;
@@ -896,8 +900,20 @@ export function pause() {
   notify();
 }
 
+const PAUSE_REASON_LABEL = {
+  'api-retry': 'API 调用失败重试',
+  'plan-review': '人工确认未通过审查的方案并继续',
+  'retry-limit': '人工确认继续超过打回上限的任务',
+} as const;
+
 export function resume() {
-  _state = { ..._state, paused: false };
+  if (_state.paused && _state.pauseReason) {
+    // 人工恢复留痕：尤其是越过审核门禁的恢复，必须可追溯
+    const label = PAUSE_REASON_LABEL[_state.pauseReason] || _state.pauseReason;
+    recordMonitorEvent('user_intervention', 'command', '用户', `人工恢复：${label}`, { pauseReason: _state.pauseReason });
+    addLog(null, 'command', `人工恢复：${label}`, 'warning');
+  }
+  _state = { ..._state, paused: false, pauseReason: undefined };
   _pausedResolve?.();
   _pausedResolve = null;
   notify();
@@ -978,7 +994,7 @@ export function computeTaskOutcome(s: PipelineState): TaskOutcome {
   const outputs = Object.values(s.stageOutputs);
   if (outputs.length === 0) return 'incomplete';
   const done = s.stageOutputs['done'];
-  if (!done || done.status === 'error') return 'incomplete';
+  if (!done || done.status !== 'done') return 'incomplete';
   if (outputs.some(o => o.status === 'error')) return 'incomplete';
   return outputs.some(o => o.source === 'demo') ? 'demo' : 'completed';
 }

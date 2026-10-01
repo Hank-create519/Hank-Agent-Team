@@ -152,6 +152,7 @@ const App: React.FC = () => {
             success: computeTaskOutcome(s) === 'completed',
             outcome: computeTaskOutcome(s),
             demoUsed: taskUsedDemo(s),
+            difficultyDegraded: s.difficultyDegraded,
             createdAt: new Date().toISOString(),
             summary: s.stageOutputs.done?.summary || '任务完成',
             reviewReport: report || null,
@@ -330,6 +331,7 @@ const App: React.FC = () => {
             success: computeTaskOutcome(s) === 'completed',
             outcome: computeTaskOutcome(s),
             demoUsed: taskUsedDemo(s),
+            difficultyDegraded: s.difficultyDegraded,
             createdAt: new Date().toISOString(),
             summary: s.stageOutputs.done?.summary || '任务完成',
             reviewReport: report || null,
@@ -360,6 +362,7 @@ const App: React.FC = () => {
             codeRejectCount: s.codeRejectCount,
             success: false,
             outcome: s.errors.length > 0 ? 'failed' : 'cancelled',
+            difficultyDegraded: s.difficultyDegraded,
             createdAt: new Date().toISOString(),
             summary: s.errors.length > 0 ? `任务失败：${s.errors[s.errors.length - 1]}` : '任务已取消',
           });

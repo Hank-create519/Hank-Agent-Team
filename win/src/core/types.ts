@@ -202,6 +202,11 @@ export interface PipelineState {
   // 本次任务的运行模式：live = 至少一个 Agent 配置了 API Key；
   // demo = 全员无 Key 的演示模式。live 任务中 demo 来源产出不得通过门禁。
   runMode: 'live' | 'demo';
+  // 暂停原因：api-retry=调用失败等待重试；plan-review=方案审查未通过待人工确认；
+  // retry-limit=审核打回达上限。恢复时会写入 user_intervention 事件留痕。
+  pauseReason?: 'api-retry' | 'plan-review' | 'retry-limit';
+  // 难度评估是否走了降级（LLM 失败 → 关键词兜底）
+  difficultyDegraded?: boolean;
   chatMessages?: ChatMessage[];    // 对话面板消息（ChatPanel 专用）
 }
 
