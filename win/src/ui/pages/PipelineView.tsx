@@ -20,7 +20,7 @@ const STAGES: { stage: PipelineStage; label: string; icon: React.ElementType; de
   { stage: 'develop', label: '开发编码', icon: Play, desc: '编码实现 + 队长自检' },
   { stage: 'code_review', label: '代码审核', icon: ShieldCheck, desc: '审核代码错误 + 改进建议' },
   { stage: 'deep_audit', label: '系统级深度审计', icon: Layers, desc: '复杂档第二道防线：审查框架兜底' },
-  { stage: 'deploy', label: '部署上线', icon: Rocket, desc: '部署 → 失败重试 → 汇报' },
+  { stage: 'deploy', label: '部署说明', icon: Rocket, desc: '生成部署说明（未接入执行器）' },
   { stage: 'done', label: '完成', icon: CheckCircle, desc: '汇总结果 → 交付用户' },
 ];
 

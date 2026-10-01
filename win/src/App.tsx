@@ -20,7 +20,7 @@ import {
   resume,
   stop,
   setPersistHandler,
-  computeTaskSuccess,
+  computeTaskOutcome,
   taskUsedDemo,
 } from './core/Engine';
 import { useAppStore, subscribeConfigSync } from './store/appStore';
@@ -149,7 +149,8 @@ const App: React.FC = () => {
             reviewAuditCount: s.reviewAuditCount,
             contentRejectCount: s.contentRejectCount,
             codeRejectCount: s.codeRejectCount,
-            success: computeTaskSuccess(s),
+            success: computeTaskOutcome(s) === 'completed',
+            outcome: computeTaskOutcome(s),
             demoUsed: taskUsedDemo(s),
             createdAt: new Date().toISOString(),
             summary: s.stageOutputs.done?.summary || '任务完成',
@@ -173,7 +174,7 @@ const App: React.FC = () => {
           setBatchQueue((prev2) => {
             const done = prev2.map((b) =>
               b.id === nextQueued.id
-                ? { ...b, status: (computeTaskSuccess(s) ? 'done' : 'failed') as 'done' | 'failed' }
+                ? { ...b, status: (computeTaskOutcome(s) !== 'incomplete' ? 'done' : 'failed') as 'done' | 'failed' }
                 : b
             );
             return done;
@@ -310,44 +311,59 @@ const App: React.FC = () => {
   // ===== Submit =====
   const handleStartPipeline = (userInput: string) => {
     if (!userInput.trim()) return;
+    // 运行锁：任务进行中不接受新输入（不清空输入框，避免内容丢失）
+    if (getState().isRunning) return;
     const store = useAppStore.getState();
 
     const origUnsub = subscribe(() => {
       const s = getState();
-      if (!s.isRunning && s.taskId && s.stage === 'done') {
-        const report = s.reviewFramework?.finalReport;
-        store.addHistory({
-          taskId: s.taskId,
-          userInput: s.userInput,
-          difficulty: s.difficulty,
-          reviewAuditCount: s.reviewAuditCount,
-          contentRejectCount: s.contentRejectCount,
-          codeRejectCount: s.codeRejectCount,
-          success: computeTaskSuccess(s),
+      if (!s.isRunning && s.taskId) {
+        if (s.stage === 'done') {
+          const report = s.reviewFramework?.finalReport;
+          store.addHistory({
+            taskId: s.taskId,
+            userInput: s.userInput,
+            difficulty: s.difficulty,
+            reviewAuditCount: s.reviewAuditCount,
+            contentRejectCount: s.contentRejectCount,
+            codeRejectCount: s.codeRejectCount,
+            success: computeTaskOutcome(s) === 'completed',
+            outcome: computeTaskOutcome(s),
             demoUsed: taskUsedDemo(s),
-          createdAt: new Date().toISOString(),
-          summary: s.stageOutputs.done?.summary || '任务完成',
-          reviewReport: report || null,
-          verdict: report?.verdict || undefined,
-          issues: report?.issues?.map((i: any) => ({
-            severity: i.severity,
-            desc: i.desc,
-          })) || undefined,
-          suggestions: report?.suggestions || undefined,
-          pros: report?.pros || undefined,
-        });
-        origUnsub();
-        // P1-7: Desktop notification
-        try {
-          const verdict = report?.verdict;
-          const verdictLabel = verdict === 'pass' ? '通过' : verdict === 'conditional' ? '有条件通过' : verdict === 'reject' ? '拒绝' : '完成';
-          new Notification(`审查完成 - ${s.stageOutputs.done?.summary || s.taskId}`, {
-            body: `结果: ${verdictLabel} | 问题: ${report?.issues?.length || 0} 个`,
+            createdAt: new Date().toISOString(),
+            summary: s.stageOutputs.done?.summary || '任务完成',
+            reviewReport: report || null,
+            verdict: report?.verdict || undefined,
+            issues: report?.issues?.map((i: any) => ({
+              severity: i.severity,
+              desc: i.desc,
+            })) || undefined,
+            suggestions: report?.suggestions || undefined,
+            pros: report?.pros || undefined,
           });
-        } catch (_) { /* ignore */ }
-      }
-      // 停止/取消（stage 非 done 且无错误）也要清理订阅，避免泄漏
-      if (!getState().isRunning && getState().taskId) {
+          // P1-7: Desktop notification
+          try {
+            const verdict = report?.verdict;
+            const verdictLabel = verdict === 'pass' ? '通过' : verdict === 'conditional' ? '有条件通过' : verdict === 'reject' ? '拒绝' : '完成';
+            new Notification(`审查完成 - ${s.stageOutputs.done?.summary || s.taskId}`, {
+              body: `结果: ${verdictLabel} | 问题: ${report?.issues?.length || 0} 个`,
+            });
+          } catch (_) { /* ignore */ }
+        } else {
+          // 失败/取消等非正常终态也入历史，便于追溯与重试
+          store.addHistory({
+            taskId: s.taskId,
+            userInput: s.userInput,
+            difficulty: s.difficulty,
+            reviewAuditCount: s.reviewAuditCount,
+            contentRejectCount: s.contentRejectCount,
+            codeRejectCount: s.codeRejectCount,
+            success: false,
+            outcome: s.errors.length > 0 ? 'failed' : 'cancelled',
+            createdAt: new Date().toISOString(),
+            summary: s.errors.length > 0 ? `任务失败：${s.errors[s.errors.length - 1]}` : '任务已取消',
+          });
+        }
         origUnsub();
       }
     });

@@ -64,9 +64,16 @@ const buildReportMarkdown = (item: HistoryItem): string => {
   return lines.join('\n');
 };
 
+// HTML 转义：报告内容含用户输入/模型输出，插入 HTML 前必须转义，防脚本注入
+const escapeHtml = (text: string): string =>
+  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
 const buildReportHTML = (item: HistoryItem): string => {
-  const md = buildReportMarkdown(item);
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>审查报告 - ${item.taskId}</title>
+  const md = escapeHtml(buildReportMarkdown(item));
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; script-src 'none'">
+<title>审查报告 - ${escapeHtml(item.taskId)}</title>
 <style>body{font-family:-apple-system,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;background:#0d0d0d;color:#ececec}h1{color:#10a37f}h2{color:#9d9d9d;margin-top:24px}li{margin:6px 0}</style></head><body>
 ${md.split('\n').map(line => {
   if (line.startsWith('# ')) return `<h1>${line.slice(2)}</h1>`;

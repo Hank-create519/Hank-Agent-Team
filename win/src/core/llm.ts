@@ -335,7 +335,7 @@ export async function callAIWithTools(
       // 解析响应：可能是文本或 tool_calls
       // rawChatCompletion 返回 JSON 字符串时需要解析
       if (!rawContent) {
-        return { content: '[空响应]', elapsedMs: Date.now() - start, mock: false, retryCount: 0, status: 'live' };
+        return { content: '', error: '模型返回空响应', elapsedMs: Date.now() - start, mock: false, retryCount: 0, status: 'failed' };
       }
 
       // 尝试解析为 tool_calls JSON
@@ -559,7 +559,10 @@ export async function callLLM(
       retryCount = result.retryCount;
     }
 
-    return { content: content || '[空响应]', elapsedMs: Date.now() - start, mock: false, retryCount, status: 'live' };
+    if (!content) {
+      return { content: '', error: '模型返回空响应', elapsedMs: Date.now() - start, mock: false, retryCount, status: 'failed' };
+    }
+    return { content, elapsedMs: Date.now() - start, mock: false, retryCount, status: 'live' };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return {

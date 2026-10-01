@@ -52,6 +52,8 @@ export interface HistoryItem {
   contentRejectCount: number;
   codeRejectCount: number;
   success: boolean;
+  // 任务终态：completed=真实完成；demo=演示完成；incomplete=未完成；failed/cancelled
+  outcome?: 'completed' | 'demo' | 'incomplete' | 'failed' | 'cancelled';
   // 是否使用了演示模式（未配置 Key / mock 产出）
   demoUsed?: boolean;
   createdAt: string;

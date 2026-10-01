@@ -103,6 +103,9 @@ export interface FinalReviewReport {
   issues: IssueItem[];              // 存在的问题（按严重程度排序）
   suggestions: string[];           // 具体的修改建议
   verdict: 'pass' | 'conditional' | 'reject';
+  // 至少一名审查员走了 mock/降级响应：verdict 已强制 conditional，
+  // 该标记供引擎把审查产出标为 demo 来源（live 任务不得据此过门禁）
+  degraded?: boolean;
   totalRounds: number;
   totalElapsedMs: number;
   generatedAt: string;
@@ -158,6 +161,7 @@ export interface DifficultyAssessment {
   reason: string;
   estimatedRounds: number;
   enableReviewFramework: boolean;   // 是否启用审查框架
+  degraded?: boolean;               // LLM 评估失败，降级为关键词兜底
 }
 
 // 监控事件（用户穿透）
@@ -195,6 +199,9 @@ export interface PipelineState {
   reviewFramework: ReviewFrameworkState | null;
   monitorEvents: MonitorEvent[];
   reviewAuditCount: number;        // 审查框架已执行次数
+  // 本次任务的运行模式：live = 至少一个 Agent 配置了 API Key；
+  // demo = 全员无 Key 的演示模式。live 任务中 demo 来源产出不得通过门禁。
+  runMode: 'live' | 'demo';
   chatMessages?: ChatMessage[];    // 对话面板消息（ChatPanel 专用）
 }
 

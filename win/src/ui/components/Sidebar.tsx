@@ -209,9 +209,18 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
                   width: 6,
                   height: 6,
                   borderRadius: '50%',
-                  background: item.success ? 'var(--accent-green)' : 'var(--accent-orange)',
+                  background: item.outcome === 'completed' ? 'var(--accent-green)'
+                    : item.outcome === 'demo' || (!item.outcome && item.demoUsed) ? '#7c6cf0'
+                    : item.outcome === 'failed' ? 'var(--accent-red)'
+                    : item.outcome === 'cancelled' ? 'var(--text-tertiary)'
+                    : 'var(--accent-orange)',
                   flexShrink: 0,
                 }}
+                title={item.outcome === 'demo' || (!item.outcome && item.demoUsed) ? '演示任务（非真实执行）'
+                  : item.outcome === 'completed' ? '真实完成'
+                  : item.outcome === 'failed' ? '失败'
+                  : item.outcome === 'cancelled' ? '已取消'
+                  : '未完成'}
               />
               <span
                 style={{
@@ -223,6 +232,24 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
               >
                 {item.userInput.length > 28 ? item.userInput.slice(0, 28) + '...' : item.userInput}
               </span>
+              {(item.outcome === 'demo' || (!item.outcome && item.demoUsed)) && (
+                <span style={{
+                  fontSize: 9, padding: '1px 5px', borderRadius: 4, flexShrink: 0,
+                  background: 'rgba(124,108,240,0.18)', color: '#a99df5',
+                }}>演示</span>
+              )}
+              {item.outcome === 'failed' && (
+                <span style={{
+                  fontSize: 9, padding: '1px 5px', borderRadius: 4, flexShrink: 0,
+                  background: 'rgba(239,68,68,0.15)', color: 'var(--accent-red)',
+                }}>失败</span>
+              )}
+              {item.outcome === 'cancelled' && (
+                <span style={{
+                  fontSize: 9, padding: '1px 5px', borderRadius: 4, flexShrink: 0,
+                  background: 'rgba(150,150,160,0.15)', color: 'var(--text-tertiary)',
+                }}>取消</span>
+              )}
               <span style={{ fontSize: 10, color: 'var(--text-tertiary)', flexShrink: 0 }}>{timeLabel}</span>
             </button>
           );

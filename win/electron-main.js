@@ -35,6 +35,13 @@ function createWindow() {
   win.on('maximize', () => win.webContents.send('window-maximized-change', true));
   win.on('unmaximize', () => win.webContents.send('window-maximized-change', false));
 
+  // 安全边界：禁止渲染进程打开新窗口或导航到未知目标（防注入后外跳）
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (event, url) => {
+    const allowed = url.startsWith('file://') || url.startsWith('http://localhost:5173');
+    if (!allowed) event.preventDefault();
+  });
+
   return win;
 }
 

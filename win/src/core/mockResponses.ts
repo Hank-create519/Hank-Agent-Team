@@ -167,7 +167,7 @@ export function mockResponse(stage: PipelineStage, userInput: string): string {
         '| 内容审核 | 审核部 | ✅ |',
         '| 编码实现 | 开发部 | ✅ |',
         '| 代码审核 | 审核部 | ✅ |',
-        '| 部署上线 | 开发部 | ✅ |',
+        '| 部署说明 | 开发部 | ✅（未接入执行器，未实际部署） |',
         '',
         '## 交付结论',
         '',

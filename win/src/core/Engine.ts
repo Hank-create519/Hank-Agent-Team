@@ -369,6 +369,16 @@ export function parseReviewResult(content: string): { approved: boolean; issues:
   return { approved: true, issues: [] };
 }
 
+// 门禁统一入口：解析审核结论，并检查产出来源。
+// live 任务中，demo/降级来源的审核产出一律不得判定为通过。
+function gateReview(stage: PipelineStage, reviewOutput: string): { approved: boolean; issues: string[] } {
+  const { approved, issues } = parseReviewResult(reviewOutput);
+  if (approved && _state.runMode === 'live' && _state.stageOutputs[stage]?.source !== 'live') {
+    return { approved: false, issues: ['审核产出为演示/降级来源，不得通过真实任务门禁'] };
+  }
+  return { approved, issues };
+}
+
 // ============ 审查框架执行（封装进度回调和状态同步） ============
 async function executeReviewFramework(
   input: string,
@@ -432,7 +442,7 @@ async function executeReviewFramework(
   const leader = pickAgent('review');
   const reportContent = formatReviewReport(report);
   saveStageOutput(triggerPoint === 'plan' ? 'audit_entry' : 'deep_audit', leader, reportContent,
-    `审查框架裁决：${verdictLabel}`, 'done', report.totalElapsedMs);
+    `审查框架裁决：${verdictLabel}`, 'done', report.totalElapsedMs, report.degraded ? 'demo' : 'live');
 
   notify();
 }
@@ -489,6 +499,8 @@ export async function startPipeline(userInput: string) {
     reviewFramework: null,
     monitorEvents: [],
     reviewAuditCount: 0,
+    // 运行模式：全员无 Key = 演示任务；live 任务中 demo 来源产出不得通过门禁
+    runMode: _state.agents.some(a => a.apiKey) ? 'live' : 'demo',
   };
 
   _state = { ..._state, agents: _state.agents.map(a => ({ ...a, status: 'idle', currentTask: '' })) };
@@ -507,6 +519,11 @@ export async function startPipeline(userInput: string) {
     const assessment = await assessDifficulty(userInput, cmdAgent, _state.models, _abortController.signal);
     if (aborted()) return;
 
+    if (assessment.degraded) {
+      addLog(cmdAgent, 'command', '难度评估降级：LLM 调用失败，已使用关键词兜底判定（本次审核强度可能与预期不符）', 'warning');
+      recordMonitorEvent('difficulty_assess', 'command', cmdAgent.name,
+        '难度评估降级：API 失败，使用关键词兜底', { degraded: true, difficulty: assessment.difficulty });
+    }
     _state.difficulty = assessment.difficulty;
     _state.difficultyReason = assessment.reason;
     setAgentStatus(cmdAgent.id, 'done');
@@ -568,7 +585,8 @@ export async function startPipeline(userInput: string) {
         _state = { ..._state, plan };
         // P1-5: 解析 Agent Skill 动态分配
         if (fullOutput.agents && Array.isArray(fullOutput.agents)) {
-          const assignments: Array<{ role: string; assignedSkills: string[] }> = fullOutput.agents;
+          const assignments: Array<{ role: string; assignedSkills: string[] }> = fullOutput.agents
+            .filter((x: any) => x && typeof x.role === 'string' && Array.isArray(x.assignedSkills));
           _state = {
             ..._state,
             agents: _state.agents.map(a => {
@@ -586,19 +604,26 @@ export async function startPipeline(userInput: string) {
     notify();
 
     // audit_entry —— 审查框架深度把关（方案级）
+    // pass 才放行；conditional/reject → 重新制定并复审，最多 2 轮；仍未通过则暂停等人工
     addMessage('command', 'review', 'task', '方案待审查框架把关');
-    await executeReviewFramework(initOutput, 'plan', _abortController.signal);
-    if (aborted()) return;
-    addMessage('review', 'command', 'result', `审查框架完成（${_state.reviewFramework?.totalRounds || 1} 轮）`);
+    let planAccepted = false;
+    let currentPlanOutput = initOutput;
+    for (let planAudit = 1; planAudit <= 2 && !planAccepted; planAudit++) {
+      await executeReviewFramework(currentPlanOutput, 'plan', _abortController.signal);
+      if (aborted()) return;
+      addMessage('review', 'command', 'result', `第 ${planAudit} 轮方案审查完成（${_state.reviewFramework?.totalRounds || 1} 轮）`);
 
-    // 方案审查被驳回 → 打回重新制定（最多1次）
-    if (_state.reviewFramework?.finalReport?.verdict !== 'pass') {
-      addLog(null, 'command', '审查框架驳回方案，指挥部重新制定', 'warning');
+      const verdict = _state.reviewFramework?.finalReport?.verdict;
+      // demo 模式下审查框架必然降级（verdict 被强制 conditional），视为演示通过
+      planAccepted = verdict === 'pass' || (_state.runMode === 'demo' && verdict === 'conditional');
+      if (planAccepted || planAudit === 2) break;
+
+      addLog(null, 'command', `方案审查未通过（${verdict === 'reject' ? '驳回' : '有条件通过'}），指挥部重新制定并送复审`, 'warning');
       notify();
-      const revisedOutput = await runStage('init',
+      currentPlanOutput = await runStage('init',
         `审查框架驳回了上一版方案，请根据以下反馈重新制定：\n\n原始需求：${userInput}\n\n可用技能列表：\n${skillListStr}\n\n审查反馈：${formatReviewReport(_state.reviewFramework!.finalReport!)}`);
       if (aborted()) return;
-      const { value: fullOutput, success: revisedOk } = safeJsonParse<any>(revisedOutput, {});
+      const { value: fullOutput, success: revisedOk } = safeJsonParse<any>(currentPlanOutput, {});
       if (revisedOk && fullOutput) {
         const planSrc = fullOutput.plan || fullOutput;
         const revisedPlan: Plan = {
@@ -609,7 +634,8 @@ export async function startPipeline(userInput: string) {
         };
         _state = { ..._state, plan: revisedPlan };
         if (fullOutput.agents && Array.isArray(fullOutput.agents)) {
-          const assignments: Array<{ role: string; assignedSkills: string[] }> = fullOutput.agents;
+          const assignments: Array<{ role: string; assignedSkills: string[] }> = fullOutput.agents
+            .filter((x: any) => x && typeof x.role === 'string' && Array.isArray(x.assignedSkills));
           _state = {
             ..._state,
             agents: _state.agents.map(a => {
@@ -621,6 +647,16 @@ export async function startPipeline(userInput: string) {
       } else {
         addLog(pickAgent('command'), 'command', '修订方案非标准 JSON，已降级为自由文本方案', 'warning');
       }
+      notify();
+    }
+    if (!planAccepted) {
+      // 恢复 = 人工确认接受当前方案继续；放弃请停止任务
+      addLog(null, 'command', '方案审查连续两轮未通过，自动暂停等待人工确认', 'error');
+      _state = { ..._state, paused: true };
+      notify();
+      await waitIfPaused();
+      if (aborted()) return;
+      addLog(null, 'command', '人工确认后继续（方案审查未通过，风险自负）', 'warning');
       notify();
     }
 
@@ -658,13 +694,13 @@ export async function startPipeline(userInput: string) {
         } else if (step === 'content_review') {
           if (!_state.stageOutputs.extract?.content) throw new Error('缺少待审核的信息提取结果');
           const output = await runStage('content_review', `请审核以下信息提取结果：\n\n${_state.stageOutputs.extract.content}\n\n【输出要求】先给出审核分析，最后一行输出 JSON 结论：{"result":"approved"或"rejected","issues":["问题"]}`);
-          const result = parseReviewResult(output);
+          const result = gateReview('content_review', output);
           if (!result.approved) throw new Error(`内容审核未明确通过：${result.issues.join('；')}`);
           contentApproved = true;
         } else if (step === 'code_review') {
           if (!_state.stageOutputs.develop?.content) throw new Error('缺少待审核的开发产出');
           const output = await runStage('code_review', `请审核以下开发产出：\n\n${_state.stageOutputs.develop.content}\n\n【输出要求】先给出审核分析，最后一行输出 JSON 结论：{"result":"approved"或"rejected","issues":["问题"]}`);
-          const result = parseReviewResult(output);
+          const result = gateReview('code_review', output);
           if (!result.approved) throw new Error(`代码审核未明确通过：${result.issues.join('；')}`);
           codeApproved = true;
         } else if (step === 'deep_audit') {
@@ -716,7 +752,7 @@ export async function startPipeline(userInput: string) {
         const reviewOutput = await runStage('content_review', `请审核以下信息提取结果的准确性：\n\n${extractOutput}\n\n【输出要求】先给出审核分析，最后一行输出 JSON 结论：{"result":"approved"或"rejected","issues":["问题"]}`);
         if (aborted()) return;
 
-        const { approved, issues } = parseReviewResult(reviewOutput);
+        const { approved, issues } = gateReview('content_review', reviewOutput);
         if (approved) {
           contentApproved = true;
           addMessage('review', 'info', 'ack', '内容审核通过');
@@ -762,7 +798,7 @@ export async function startPipeline(userInput: string) {
         const codeReviewOutput = await runStage('code_review', `请审核以下代码：\n\n${devOutput}\n\n【输出要求】先给出审核分析，最后一行输出 JSON 结论：{"result":"approved"或"rejected","issues":["问题"]}`);
         if (aborted()) return;
 
-        const { approved, issues } = parseReviewResult(codeReviewOutput);
+        const { approved, issues } = gateReview('code_review', codeReviewOutput);
         if (approved) {
           codeApproved = true;
           addMessage('review', 'develop', 'ack', '代码审核通过');
@@ -932,13 +968,24 @@ async function _persist(action: PersistAction, payload?: any) {
   }
 }
 
-// ============ 任务成功判定（结构化） ============
-// 不再以 errors.length 为准：只要存在失败阶段就算失败；
-// demoUsed 标记本次任务是否依赖演示模式产出。
-export function computeTaskSuccess(s: PipelineState): boolean {
+// ============ 任务终态判定（结构化） ============
+// completed = 必须有 done 阶段且全部阶段无失败、全部为 live 产出；
+// demo      = 流程走完但含演示产出（不计入真实成功）；
+// incomplete= 未完成/有失败阶段。
+export type TaskOutcome = 'completed' | 'demo' | 'incomplete';
+
+export function computeTaskOutcome(s: PipelineState): TaskOutcome {
   const outputs = Object.values(s.stageOutputs);
-  if (outputs.length === 0) return false;
-  return outputs.every(o => o.status !== 'error');
+  if (outputs.length === 0) return 'incomplete';
+  const done = s.stageOutputs['done'];
+  if (!done || done.status === 'error') return 'incomplete';
+  if (outputs.some(o => o.status === 'error')) return 'incomplete';
+  return outputs.some(o => o.source === 'demo') ? 'demo' : 'completed';
+}
+
+// 兼容旧调用点：非 incomplete 即完成（demo 也算完成，但历史里会单独标记）
+export function computeTaskSuccess(s: PipelineState): boolean {
+  return computeTaskOutcome(s) !== 'incomplete';
 }
 
 export function taskUsedDemo(s: PipelineState): boolean {

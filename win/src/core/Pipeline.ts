@@ -173,6 +173,7 @@ export function createInitialState(): PipelineState {
     reviewFramework: null,
     monitorEvents: [],
     reviewAuditCount: 0,
+    runMode: 'live',
   };
 }
 

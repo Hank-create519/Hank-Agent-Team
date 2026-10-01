@@ -28,7 +28,7 @@ const STAGE_LABELS: Record<string, { label: string; icon: React.ElementType }> =
   develop: { label: '开发编码', icon: Play },
   code_review: { label: '代码审核', icon: ShieldCheck },
   deep_audit: { label: '系统级深度审计', icon: ShieldCheck },
-  deploy: { label: '部署上线', icon: Rocket },
+  deploy: { label: '部署说明', icon: Rocket },
   done: { label: '完成', icon: ShieldCheck },
 };
 
@@ -51,9 +51,11 @@ const Dashboard: React.FC<DashboardProps> = ({ pipeline, onNavigate, onStartPipe
   const [userInput, setUserInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBatchMode, setIsBatchMode] = useState(false);
+  // 运行锁：任务进行中禁止重复提交（引擎会静默忽略，这里直接不让点）
+  const busy = isSubmitting || pipeline.isRunning;
 
   const handleSubmit = async () => {
-    if (!userInput.trim() || isSubmitting) return;
+    if (!userInput.trim() || busy) return;
     setIsSubmitting(true);
     if (isBatchMode && onStartBatch) {
       const lines = userInput.split('\n').map(l => l.trim()).filter(Boolean);
@@ -145,14 +147,14 @@ const Dashboard: React.FC<DashboardProps> = ({ pipeline, onNavigate, onStartPipe
             <button
               className="btn btn-primary btn-lg"
               onClick={handleSubmit}
-              disabled={!userInput.trim() || isSubmitting}
+              disabled={!userInput.trim() || busy}
               style={{
                 minWidth: 200, boxShadow: '0 0 20px rgba(77, 171, 247, 0.2)',
-                opacity: !userInput.trim() || isSubmitting ? 0.6 : 1,
-                cursor: !userInput.trim() || isSubmitting ? 'not-allowed' : 'pointer',
+                opacity: !userInput.trim() || busy ? 0.6 : 1,
+                cursor: !userInput.trim() || busy ? 'not-allowed' : 'pointer',
               }}
             >
-              {isSubmitting ? (
+              {busy ? (
                 <span className="dot-loader"><span /><span /><span /></span>
               ) : '启动流水线'}
             </button>

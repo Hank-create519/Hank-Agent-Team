@@ -93,7 +93,7 @@ export async function assessDifficulty(
   }
 }
 
-// 基于关键词的兜底评估
+// 基于关键词的兜底评估（degraded=true：调用方应向用户明示本次为降级判定）
 function keywordAssessment(input: string): DifficultyAssessment {
   const complex = /系统设计|架构|多模块|集成|复杂代码|重要报告|全面分析|深度/i;
   const simple = /简单|快速|小|格式|转换|修改一个|改一下|查一下/i;
@@ -104,6 +104,7 @@ function keywordAssessment(input: string): DifficultyAssessment {
       reason: '关键词匹配（复杂档）',
       estimatedRounds: 3,
       enableReviewFramework: true,
+      degraded: true,
     };
   }
   if (simple.test(input)) {
@@ -112,6 +113,7 @@ function keywordAssessment(input: string): DifficultyAssessment {
       reason: '关键词匹配（简单档）',
       estimatedRounds: 0,
       enableReviewFramework: false,
+      degraded: true,
     };
   }
   return {
@@ -119,5 +121,6 @@ function keywordAssessment(input: string): DifficultyAssessment {
     reason: '关键词匹配（中等档，默认）',
     estimatedRounds: 1,
     enableReviewFramework: true,
+    degraded: true,
   };
 }

@@ -232,6 +232,7 @@ export async function runReviewFramework(
       opts.models,
       'init' as any,
       userMsg,
+      opts.signal,
     );
     if (result.error || result.mock) {
       reviewDegraded = true;
@@ -402,6 +403,7 @@ export async function runReviewFramework(
   // 解析最终报告
   const report = parseFinalReport(finalResult);
   if (reviewDegraded) {
+    report.degraded = true;
     report.verdict = 'conditional';
     report.issues.unshift({
       severity: 'high',

@@ -1,12 +1,12 @@
 // ============================================================
-// 阶段 0 回归单测：门禁判定、审核解析、计划校验、成功判定
-// 场景对照（阶段0修复验收）：
-//   - API 失败/mock 不得通过门禁
-//   - 审核文本"不通过"不得误判为通过
-//   - 暂停恢复不绕过失败（由 Engine 恢复重试语义保证，此处测纯函数部分）
+// 回归单测：门禁判定、审核解析、计划校验、任务终态判定
+// 覆盖场景（对应历次审计验收项）：
+//   - API 失败/mock 不得通过真实门禁
+//   - 审核文本"不通过"不得误判为通过（main 版回归项）
+//   - 成功判定必须包含 done 阶段；demo 产出单独标记
 // ============================================================
 import { describe, it, expect } from 'vitest';
-import { parseReviewResult, validatePlan, computeTaskSuccess } from '../Engine';
+import { parseReviewResult, validatePlan, computeTaskOutcome } from '../Engine';
 import { createInitialState } from '../Pipeline';
 import type { PipelineState } from '../types';
 
@@ -53,10 +53,8 @@ describe('validatePlan（ConstitutionGuard）', () => {
   const fullPlan = ['extract', 'content_review', 'develop', 'code_review', 'deep_audit', 'deploy', 'done'];
 
   it('完整计划通过', () => {
-    const before = JSON.stringify(fullPlan);
     const { valid, errors } = validatePlan([...fullPlan] as any);
     expect(valid).toBe(true);
-    expect(JSON.stringify(fullPlan)).toBe(before);
     expect(errors).toHaveLength(0);
   });
 
@@ -86,8 +84,12 @@ describe('validatePlan（ConstitutionGuard）', () => {
   });
 });
 
-describe('computeTaskSuccess（任务成功判定，替代 errors.length）', () => {
-  function stateWith(stage: string, status: 'running' | 'done' | 'error'): PipelineState {
+describe('computeTaskOutcome（任务终态判定）', () => {
+  function stateWith(
+    stage: string,
+    status: 'running' | 'done' | 'error',
+    source: 'live' | 'demo' = 'live',
+  ): PipelineState {
     const s = createInitialState();
     return {
       ...s,
@@ -95,22 +97,66 @@ describe('computeTaskSuccess（任务成功判定，替代 errors.length）', ()
         ...s.stageOutputs,
         [stage]: {
           stage, agentId: 'a', agentName: 'A', department: 'develop',
-          content: '', summary: '', status, source: 'live', elapsedMs: 1,
+          content: '', summary: '', status, source, elapsedMs: 1,
           timestamp: new Date().toISOString(),
         },
       },
     } as PipelineState;
   }
 
-  it('全部阶段 done → 成功', () => {
-    expect(computeTaskSuccess(stateWith('develop', 'done'))).toBe(true);
+  it('done 阶段完成且全部 live → completed', () => {
+    const s = stateWith('develop', 'done');
+    const s2 = {
+      ...s,
+      stageOutputs: {
+        ...s.stageOutputs,
+        done: {
+          stage: 'done', agentId: 'a', agentName: 'A', department: 'command',
+          content: '', summary: '', status: 'done', source: 'live', elapsedMs: 1,
+          timestamp: new Date().toISOString(),
+        },
+      },
+    } as PipelineState;
+    expect(computeTaskOutcome(s2)).toBe('completed');
   });
 
-  it('存在 error 阶段 → 失败（即使 errors 数组为空）', () => {
-    expect(computeTaskSuccess(stateWith('develop', 'error'))).toBe(false);
+  it('缺少 done 阶段 → incomplete（即使其他阶段都成功）', () => {
+    expect(computeTaskOutcome(stateWith('develop', 'done'))).toBe('incomplete');
   });
 
-  it('无任何阶段产出 → 不算成功', () => {
-    expect(computeTaskSuccess(createInitialState())).toBe(false);
+  it('存在 error 阶段 → incomplete', () => {
+    const s = stateWith('develop', 'error');
+    const s2 = {
+      ...s,
+      stageOutputs: {
+        ...s.stageOutputs,
+        done: {
+          stage: 'done', agentId: 'a', agentName: 'A', department: 'command',
+          content: '', summary: '', status: 'done', source: 'live', elapsedMs: 1,
+          timestamp: new Date().toISOString(),
+        },
+      },
+    } as PipelineState;
+    expect(computeTaskOutcome(s2)).toBe('incomplete');
+  });
+
+  it('含 demo 产出 → demo（不计入真实成功）', () => {
+    const s = stateWith('develop', 'done', 'demo');
+    const s2 = {
+      ...s,
+      stageOutputs: {
+        ...s.stageOutputs,
+        done: {
+          stage: 'done', agentId: 'a', agentName: 'A', department: 'command',
+          content: '', summary: '', status: 'done', source: 'demo', elapsedMs: 1,
+          timestamp: new Date().toISOString(),
+        },
+      },
+    } as PipelineState;
+    expect(computeTaskOutcome(s2)).toBe('demo');
+  });
+
+  it('无任何阶段产出 → incomplete', () => {
+    expect(computeTaskOutcome(createInitialState())).toBe('incomplete');
   });
 });
