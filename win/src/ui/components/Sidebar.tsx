@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PipelineState } from '../../core/types';
 import { useAppStore } from '../../store/appStore';
 import type { HistoryItem } from '../../store/appStore';
-import { Settings, Sun, Moon } from 'lucide-react';
+import { Settings, Sun, Moon, Monitor } from 'lucide-react';
 
 interface SidebarProps {
   currentPage: string;
@@ -29,23 +29,40 @@ const activeBarStyle: React.CSSProperties = {
   background: 'var(--accent)',
 };
 
+type ThemeMode = 'dark' | 'light' | 'auto';
+
+const THEME_LABEL: Record<ThemeMode, string> = {
+  dark: '深色主题',
+  light: '浅色主题',
+  auto: '跟随系统',
+};
+const THEME_ORDER: ThemeMode[] = ['dark', 'light', 'auto'];
+
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, onSelectHistory }) => {
   const history = useAppStore((s) => s.history);
-  const [darkMode, setDarkMode] = useState(true);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(
+    () => (localStorage.getItem('theme-mode') as ThemeMode) || 'dark'
+  );
 
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.removeAttribute('data-theme');
-    } else {
-      document.documentElement.setAttribute('data-theme', 'light');
-    }
-    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
-  }, [darkMode]);
-
-  useEffect(() => {
-    const saved = localStorage.getItem('theme');
-    if (saved === 'light') setDarkMode(false);
-  }, []);
+    const apply = () => {
+      const effective = themeMode === 'auto'
+        ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+        : themeMode;
+      if (effective === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    };
+    apply();
+    localStorage.setItem('theme-mode', themeMode);
+    localStorage.setItem('theme', themeMode === 'auto' ? 'auto' : themeMode);
+    if (themeMode !== 'auto') return;
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, [themeMode]);
 
   return (
     <aside
@@ -165,8 +182,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
           REVIEW HISTORY
         </div>
         {history.length === 0 && (
-          <div style={{ padding: '4px 20px', fontSize: 12, color: 'var(--text-tertiary)', opacity: 0.6 }}>
-            暂无审查记录
+          <div className="empty-state" style={{ padding: '14px 20px' }}>
+            <span className="empty-title">暂无审查记录</span>
+            <span className="empty-hint">在总览页运行一次任务后，记录会显示在这里</span>
           </div>
         )}
         {history.slice(0, 10).map((item, i) => {
@@ -323,8 +341,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
         </div>
         {/* P2-13: 主题切换 */}
         <button
-          onClick={() => setDarkMode(!darkMode)}
-          title={darkMode ? '切换到亮色主题' : '切换到深色主题'}
+          onClick={() => setThemeMode(THEME_ORDER[(THEME_ORDER.indexOf(themeMode) + 1) % THEME_ORDER.length])}
+          title={`当前：${THEME_LABEL[themeMode]}，点击切换`}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -347,8 +365,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
             e.currentTarget.style.color = 'var(--text-secondary)';
           }}
         >
-          {darkMode ? <Sun size={14} /> : <Moon size={14} />}
-          <span>{darkMode ? '亮色主题' : '深色主题'}</span>
+          {themeMode === 'dark' ? <Moon size={14} /> : themeMode === 'light' ? <Sun size={14} /> : <Monitor size={14} />}
+          <span>{THEME_LABEL[themeMode]}</span>
         </button>
 
         {/* 设置按钮 */}

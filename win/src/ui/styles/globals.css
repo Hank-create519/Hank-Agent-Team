@@ -3,84 +3,99 @@
 @tailwind utilities;
 
 /* ============================================
-   Hank Agent Team Design System V2
-   Apple/Tesla-inspired: 极简深色 + 克制的单一主色
-   层次靠明度与发丝线，不靠彩色装饰
+   Hank Agent Team Design System V3
+   macOS 式工作台：安静、克制、层级靠明度与留白
+   原则：轻量材质（只用于窗体骨架）、单一系统蓝、
+   状态必须有文字辅助、动效短促克制
    ============================================ */
 
 @layer base {
   :root {
-    /* ── 背景层级（中性微冷灰阶，Tesla 式深空）── */
-    --bg-primary:    #0a0a0c;
-    --bg-sidebar:    #0e0e11;
+    /* ── 背景层级（深空灰，面板与背景保持细微明度差）── */
+    --bg-primary:    #0b0b0d;
+    --bg-sidebar:    #101013;
     --bg-elevated:   #161619;
-    --bg-input:      #1b1b1f;
-    --bg-hover:      #202026;
+    --bg-input:      #1c1c20;
+    --bg-hover:      #202025;
     --bg-card:       var(--bg-elevated);
     --bg-card-hover: var(--bg-hover);
     --bg-secondary:  #101013;
     --bg-root:       var(--bg-primary);
 
-    /* ── 主交互色（Apple 系统蓝，克制使用）── */
+    /* ── 轻量材质：仅窗体骨架使用（侧栏/标签栏/输入栏）── */
+    --glass-bg:       rgba(20, 20, 24, 0.78);
+    --glass-bg-strong: rgba(16, 16, 20, 0.85);
+    --glass-blur:     18px saturate(1.35);
+    --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+    /* ── 主交互色（系统蓝，克制使用）── */
     --accent:        #0a84ff;
     --accent-hover:  #3395ff;
     --accent-dim:    rgba(10, 132, 255, 0.12);
     --accent-secondary: #5e5ce6;
     --accent-deep:   #0060df;
 
-    /* ── 状态色（Apple 系统色·暗色档）── */
+    /* ── 状态色（绿=真实成功，橙=等待/降级，红=失败，灰=空闲；
+           必须与文字/图标成对出现）── */
     --accent-green:  #30d158;
     --accent-orange: #ff9f0a;
     --accent-purple: #bf5af2;
     --accent-red:    #ff453a;
 
-    /* ── 部门点缀色（同族降饱和）── */
+    /* ── 部门点缀色 ── */
     --dept-command:  #0a84ff;
     --dept-info:     #64d2ff;
     --dept-develop:  #ff9f0a;
     --dept-review:   #bf5af2;
 
-    /* ── 文字三级（Apple 灰阶）── */
+    /* ── 文字三级（对比度校正）── */
     --text-primary:   #f5f5f7;
-    --text-secondary: #a1a1a6;
-    --text-tertiary:  #6e6e73;
+    --text-secondary: #a8a8ad;
+    --text-tertiary:  #86868b;
 
     /* ── 边框（发丝线）── */
     --border:       rgba(255, 255, 255, 0.08);
-    --border-light: rgba(255, 255, 255, 0.14);
+    --border-light: rgba(255, 255, 255, 0.15);
 
-    /* ── 圆角四级（更柔和）── */
+    /* ── 圆角 ── */
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 14px;
     --radius-xl: 18px;
 
-    /* ── 阴影（柔和抬升，不发光）── */
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
-    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+    /* ── 间距刻度（4 基准）── */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+
+    /* ── 阴影 ── */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.32);
+    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.45);
     --glow-accent: none;
     --glow-subtle: none;
 
-    /* ── 字体：Windows 下 Segoe UI + 微软雅黑（修复中文回退宋体）── */
+    /* ── 字体 ── */
     --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable",
                  "Segoe UI", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei UI",
                  "Microsoft YaHei", "Helvetica Neue", sans-serif;
     --font-mono: "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas, Menlo, monospace;
 
-    /* ── 液态玻璃材质 ── */
-    --glass-bg: rgba(24, 24, 29, 0.62);
-    --glass-bg-strong: rgba(18, 18, 22, 0.72);
-    --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-
-    /* ── spring 缓动 ── */
+    /* ── 动效时长（短促克制）── */
+    --dur-fast: 120ms;   /* 悬停/按压反馈 */
+    --dur-normal: 240ms; /* 面板/状态变化 */
+    --dur-slow: 340ms;   /* 页面切换 */
     --spring: cubic-bezier(0.32, 0.72, 0, 1);
   }
 
-  /* 亮色主题（Apple 浅色档） */
+  /* 亮色主题 */
   [data-theme="light"] {
     --bg-primary:    #f5f5f7;
-    --bg-sidebar:    #ececed;
+    --bg-sidebar:    #ececef;
     --bg-elevated:   #ffffff;
     --bg-input:      #f0f0f2;
     --bg-hover:      #e8e8ed;
@@ -88,6 +103,8 @@
     --bg-card-hover: var(--bg-hover);
     --bg-secondary:  #fafafa;
     --bg-root:       var(--bg-primary);
+    --glass-bg:       rgba(255, 255, 255, 0.82);
+    --glass-bg-strong: rgba(252, 252, 253, 0.88);
     --accent:        #0071e3;
     --accent-hover:  #0077ed;
     --accent-dim:    rgba(0, 113, 227, 0.08);
@@ -96,12 +113,10 @@
     --border:        rgba(0, 0, 0, 0.10);
     --border-light:  rgba(0, 0, 0, 0.16);
     --text-primary:   #1d1d1f;
-    --text-secondary: #6e6e73;
-    --text-tertiary:  #aeaeb2;
+    --text-secondary: #56565c;
+    --text-tertiary:  #86868b;
     --shadow-md: 0 2px 12px rgba(0, 0, 0, 0.08);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
-    --glass-bg: rgba(255, 255, 255, 0.66);
-    --glass-bg-strong: rgba(255, 255, 255, 0.78);
   }
 }
 
@@ -128,15 +143,14 @@ body {
   letter-spacing: -0.01em;
 }
 
-/* 环境光：两团极淡的系统色光晕，让玻璃面板有可折射的底色 */
+/* 环境光：极淡的单色光晕，只提供层次不提供装饰 */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(1100px 640px at 10% -12%, rgba(10, 132, 255, 0.10), transparent 62%),
-    radial-gradient(1000px 720px at 108% 112%, rgba(94, 92, 230, 0.08), transparent 62%),
+    radial-gradient(1100px 640px at 10% -12%, rgba(10, 132, 255, 0.06), transparent 62%),
     var(--bg-primary);
 }
 
@@ -145,56 +159,48 @@ body::before {
   display: flex;
 }
 
-/* ── 液态玻璃工具类 ── */
+/* ── 轻量材质：窗体骨架专用 ── */
 .liquid {
   background: var(--glass-bg);
-  backdrop-filter: blur(28px) saturate(1.6);
-  -webkit-backdrop-filter: blur(28px) saturate(1.6);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .liquid-strong {
   background: var(--glass-bg-strong);
-  backdrop-filter: blur(32px) saturate(1.7);
-  -webkit-backdrop-filter: blur(32px) saturate(1.7);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
-/* ── 卡片：液态玻璃 + 发丝线 + 悬停轻浮 ── */
+/* ── 卡片：沉稳实体面 + 发丝线（不用玻璃）── */
 .glass-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(24px) saturate(1.55);
-  -webkit-backdrop-filter: blur(24px) saturate(1.55);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm), var(--glass-highlight);
-  transition: border-color 240ms var(--spring), box-shadow 240ms var(--spring),
-              transform 240ms var(--spring), background 240ms var(--spring);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--dur-normal) var(--spring), box-shadow var(--dur-normal) var(--spring);
 }
 
 .glass-card:hover {
   border-color: var(--border-light);
-  box-shadow: var(--shadow-md), var(--glass-highlight);
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .glass-card-static {
-  background: var(--glass-bg);
-  backdrop-filter: blur(24px) saturate(1.55);
-  -webkit-backdrop-filter: blur(24px) saturate(1.55);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm), var(--glass-highlight);
+  box-shadow: var(--shadow-sm);
 }
 
 /* ── 输入框 ── */
 .glass-input {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(1.5);
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-family: inherit;
-  transition: border-color 200ms var(--spring), background 200ms var(--spring);
+  transition: border-color var(--dur-fast) var(--spring), box-shadow var(--dur-fast) var(--spring);
   outline: none;
   width: 100%;
   padding: 10px 14px;
@@ -207,7 +213,6 @@ body::before {
 
 .glass-input:focus {
   border-color: rgba(10, 132, 255, 0.55);
-  background: var(--bg-input);
   box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.14);
 }
 
@@ -234,7 +239,7 @@ body::before {
   font-family: inherit;
   border: none;
   cursor: pointer;
-  transition: all 200ms var(--spring);
+  transition: all var(--dur-fast) var(--spring);
   letter-spacing: -0.01em;
   outline: none;
   white-space: nowrap;
@@ -262,7 +267,6 @@ body::before {
   background: var(--accent-deep);
 }
 
-/* 次级按钮：中性灰面 + 发丝线（Apple 风），不再用描边彩框 */
 .btn-secondary {
   background: var(--bg-hover);
   color: var(--text-primary);
@@ -291,7 +295,61 @@ body::before {
   border-radius: var(--radius-md);
 }
 
-/* ── 滚动条：中性细条（不再用主题色）── */
+/* ── 状态徽标（颜色 + 文字成对出现）── */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.status-badge::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.status-badge.ok      { background: rgba(48, 209, 88, 0.14);  color: var(--accent-green); }
+.status-badge.wait    { background: rgba(255, 159, 10, 0.14); color: var(--accent-orange); }
+.status-badge.err     { background: rgba(255, 69, 58, 0.14);  color: var(--accent-red); }
+.status-badge.info    { background: rgba(10, 132, 255, 0.14); color: var(--accent); }
+.status-badge.muted   { background: rgba(134, 134, 139, 0.16); color: var(--text-tertiary); }
+
+[data-theme="light"] .status-badge.ok    { background: rgba(52, 199, 89, 0.12); }
+[data-theme="light"] .status-badge.wait  { background: rgba(255, 159, 10, 0.12); }
+[data-theme="light"] .status-badge.err   { background: rgba(255, 59, 48, 0.10); }
+[data-theme="light"] .status-badge.info  { background: rgba(0, 113, 227, 0.10); }
+
+/* ── 空状态 ── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 16px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.empty-state .empty-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.empty-state .empty-hint {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+/* ── 滚动条：中性细条 ── */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -324,6 +382,19 @@ body::before {
   background-clip: padding-box;
 }
 
+/* ── 键盘焦点可见性 ── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+button:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible) {
+  outline: none;
+}
+
 /* ── 动画 ── */
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(12px); }
@@ -336,7 +407,7 @@ body::before {
 }
 
 .page-enter {
-  animation: page-in 340ms var(--spring) both;
+  animation: page-in var(--dur-slow) var(--spring) both;
 }
 
 @keyframes dot-pulse {
@@ -345,7 +416,16 @@ body::before {
 }
 
 .animate-fade-up {
-  animation: fade-up 400ms var(--spring) both;
+  animation: fade-up var(--dur-normal) var(--spring) both;
+}
+
+/* 尊重系统"减少动态效果"偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ── dot-loader 三点加载 ── */
