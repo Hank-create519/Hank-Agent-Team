@@ -84,10 +84,9 @@ const Dashboard: React.FC<DashboardProps> = ({ pipeline, onNavigate, onStartPipe
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <h1
             style={{
-              fontSize: 48, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.1,
-              marginBottom: 16,
-              background: 'linear-gradient(135deg, var(--accent), var(--accent-secondary))',
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+              fontSize: 38, fontWeight: 650, letterSpacing: '-0.035em', lineHeight: 1.1,
+              marginBottom: 14,
+              color: 'var(--text-primary)',
             }}
           >
             Hank Agent Team

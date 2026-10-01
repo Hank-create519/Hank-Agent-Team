@@ -63,14 +63,11 @@ const StartupScreen: React.FC<{ onReady: () => void }> = ({ onReady }) => {
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.3, duration: 0.5 }}
           style={{
-            fontSize: 48,
-            fontWeight: 700,
-            letterSpacing: '-0.03em',
+            fontSize: 44,
+            fontWeight: 650,
+            letterSpacing: '-0.035em',
             lineHeight: 1.1,
-            background: 'linear-gradient(135deg, #4DABF7, #22D3EE)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
+            color: 'var(--text-primary)',
             marginBottom: 8,
           }}
         >

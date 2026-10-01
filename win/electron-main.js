@@ -12,7 +12,7 @@ function createWindow() {
     height: 900,
     minWidth: 1000,
     minHeight: 680,
-    backgroundColor: '#05050F',
+    backgroundColor: '#0a0a0c',
     frame: false,
     // macOS 专属：隐藏标题栏并保留红绿灯按钮 + 毛玻璃质感
     ...(isMac ? { titleBarStyle: 'hiddenInset', vibrancy: 'dark' } : {}),
