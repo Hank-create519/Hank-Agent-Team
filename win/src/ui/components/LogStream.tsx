@@ -79,7 +79,9 @@ const LogStream: React.FC<LogStreamProps> = ({ logs, maxHeight = 400 }) => {
               style={{
                 padding: '16px 20px',
                 borderLeft: `3px solid ${DEPT_COLORS[log.department] || 'var(--accent)'}`,
-                animation: `fade-up 500ms var(--spring) ${i * 0.08}s both`,
+                // 仅新挂载的条目做短促淡入：无按序延迟（旧实现的 i*0.08s
+                // 会让第 N 条日志等待 N*80ms 才出现，长任务严重拖慢阅读）
+                animation: 'fade-up 200ms var(--spring) both',
               }}
             >
               <div

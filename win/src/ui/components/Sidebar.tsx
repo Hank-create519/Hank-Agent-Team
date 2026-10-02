@@ -40,6 +40,8 @@ const THEME_ORDER: ThemeMode[] = ['dark', 'light', 'auto'];
 
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, onSelectHistory }) => {
   const history = useAppStore((s) => s.history);
+  const collapsed = useAppStore((s) => s.sidebarCollapsed);
+  const toggleCollapsed = useAppStore((s) => s.toggleSidebar);
   const [themeMode, setThemeMode] = useState<ThemeMode>(
     () => (localStorage.getItem('theme-mode') as ThemeMode) || 'dark'
   );
@@ -67,21 +69,33 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
   return (
     <aside
       style={{
-        width: 260,
-        minWidth: 260,
+        width: collapsed ? 64 : 260,
+        minWidth: collapsed ? 64 : 260,
         height: '100vh',
         display: 'flex',
         flexDirection: 'column',
+        overflow: 'hidden',
         background: 'var(--glass-bg-strong)',
         backdropFilter: 'blur(32px) saturate(1.7)',
         WebkitBackdropFilter: 'blur(32px) saturate(1.7)',
+        transition: 'width var(--dur-normal) var(--spring), min-width var(--dur-normal) var(--spring)',
         borderRight: '1px solid var(--border)',
         userSelect: 'none',
         zIndex: 50,
       }}
     >
-      {/* ===== 项目名 ===== */}
-      <div style={{ padding: '24px 20px 8px' }}>
+      {/* ===== 项目名 + 折叠开关 ===== */}
+      <div style={{ padding: collapsed ? '16px 10px 8px' : '24px 20px 8px', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between' }}>
+        {collapsed ? (
+          <button
+            onClick={toggleCollapsed}
+            title="展开侧栏"
+            style={{ width: 32, height: 32, borderRadius: 'var(--radius-sm)', border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 14 }}
+          >
+            »
+          </button>
+        ) : (
+        <div>
         <div
           style={{
             fontSize: 14,
@@ -102,10 +116,22 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
         >
           Agent Team v42
         </div>
+        </div>
+        )}
+        {!collapsed && (
+          <button
+            onClick={toggleCollapsed}
+            title="收起侧栏"
+            style={{ width: 26, height: 26, borderRadius: 'var(--radius-sm)', border: 'none', background: 'transparent', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 13, flexShrink: 0 }}
+          >
+            «
+          </button>
+        )}
       </div>
 
       {/* ===== 导航 ===== */}
       <div style={{ padding: '16px 0 4px' }}>
+        {!collapsed && (
         <div
           style={{
             padding: '0 20px',
@@ -119,6 +145,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
         >
           NAVIGATION
         </div>
+        )}
         <nav style={{ display: 'flex', flexDirection: 'column' }}>
           {NAV_ITEMS.map((item) => {
             const active = currentPage === item.id;
@@ -133,7 +160,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
                   gap: 10,
                   width: '100%',
                   height: 36,
-                  padding: '0 20px',
+                  padding: collapsed ? 0 : '0 20px',
+                  justifyContent: collapsed ? 'center' : 'flex-start',
                   fontSize: 13,
                   fontWeight: active ? 500 : 400,
                   cursor: 'pointer',
@@ -159,7 +187,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
               >
                 {active && <span style={activeBarStyle} />}
                 <span style={{ fontSize: 12, width: 16, textAlign: 'center' }}>{item.icon}</span>
-                <span>{item.label}</span>
+                {!collapsed && <span>{item.label}</span>}
               </button>
             );
           })}
@@ -167,7 +195,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
       </div>
 
       {/* ===== 审查历史 ===== */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0 4px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0 4px', display: collapsed ? 'none' : 'block' }}>
         <div
           style={{
             padding: '0 20px',
@@ -292,8 +320,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
           gap: 8,
         }}
       >
-        {/* 活跃 Agent */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* 活跃 Agent（折叠态隐藏：内容依赖文字） */}
+        <div style={{ display: collapsed ? 'none' : 'flex', alignItems: 'center', gap: 8 }}>
           <div
             style={{
               width: 7,
@@ -366,7 +394,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
           }}
         >
           {themeMode === 'dark' ? <Moon size={14} /> : themeMode === 'light' ? <Sun size={14} /> : <Monitor size={14} />}
-          <span>{THEME_LABEL[themeMode]}</span>
+          {!collapsed && <span>{THEME_LABEL[themeMode]}</span>}
         </button>
 
         {/* 设置按钮 */}
@@ -397,7 +425,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
           }}
         >
           <Settings size={14} />
-          <span>Settings</span>
+          {!collapsed && <span>Settings</span>}
         </button>
       </div>
     </aside>

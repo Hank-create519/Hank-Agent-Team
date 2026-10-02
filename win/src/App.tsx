@@ -417,6 +417,7 @@ const App: React.FC = () => {
     if (!rightPanelOpen) return null;
     return (
       <div
+        className="panel-enter"
         style={{
           width: 320,
           minWidth: 320,

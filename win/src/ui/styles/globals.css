@@ -88,7 +88,7 @@
     /* ── 动效时长（短促克制）── */
     --dur-fast: 120ms;   /* 悬停/按压反馈 */
     --dur-normal: 240ms; /* 面板/状态变化 */
-    --dur-slow: 340ms;   /* 页面切换 */
+    --dur-slow: 300ms;   /* 页面切换/复杂面板 */
     --spring: cubic-bezier(0.32, 0.72, 0, 1);
   }
 
@@ -399,6 +399,15 @@ textarea:focus:not(:focus-visible) {
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.panel-enter {
+  animation: panel-in var(--dur-normal) var(--spring) both;
 }
 
 @keyframes page-in {

@@ -165,7 +165,7 @@ const PipelineView: React.FC<PipelineViewProps> = ({ pipeline, onStageChange, on
                   padding: '16px 20px',
                   marginBottom: 12,
                   opacity: isFuture ? 0.4 : 1,
-                  transition: 'all 0.3s',
+                  transition: 'all var(--dur-normal) var(--spring)',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
