@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PipelineState } from '../../core/types';
 import { useAppStore } from '../../store/appStore';
 import type { HistoryItem } from '../../store/appStore';
-import { Settings, Sun, Moon, Monitor } from 'lucide-react';
+import { Activity, GitBranch, LayoutDashboard, Monitor, Settings, ShieldCheck, Sparkles, Sun, Moon, Users } from 'lucide-react';
 
 interface SidebarProps {
   currentPage: string;
@@ -12,11 +12,11 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS = [
-  { id: 'dashboard', icon: '\u25C8', label: '总览' },
-  { id: 'pipeline', icon: '\u25C7', label: '流水线' },
-  { id: 'review', icon: '\u25C8', label: '审查详情' },
-  { id: 'monitor', icon: '\u25C9', label: '监控' },
-  { id: 'agents', icon: '\u25CE', label: '团队配置' },
+  { id: 'dashboard', icon: LayoutDashboard, label: '总览' },
+  { id: 'pipeline', icon: GitBranch, label: '流水线' },
+  { id: 'review', icon: ShieldCheck, label: '审查详情' },
+  { id: 'monitor', icon: Activity, label: '监控' },
+  { id: 'agents', icon: Users, label: '团队配置' },
 ];
 
 const activeBarStyle: React.CSSProperties = {
@@ -43,7 +43,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
   const collapsed = useAppStore((s) => s.sidebarCollapsed);
   const toggleCollapsed = useAppStore((s) => s.toggleSidebar);
   const [themeMode, setThemeMode] = useState<ThemeMode>(
-    () => (localStorage.getItem('theme-mode') as ThemeMode) || 'dark'
+    () => (localStorage.getItem('theme-mode') as ThemeMode) || 'light'
   );
 
   useEffect(() => {
@@ -51,11 +51,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
       const effective = themeMode === 'auto'
         ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
         : themeMode;
-      if (effective === 'light') {
-        document.documentElement.setAttribute('data-theme', 'light');
-      } else {
-        document.documentElement.removeAttribute('data-theme');
-      }
+      document.documentElement.setAttribute('data-theme', effective);
     };
     apply();
     localStorage.setItem('theme-mode', themeMode);
@@ -68,6 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
 
   return (
     <aside
+      className="app-sidebar"
       style={{
         width: collapsed ? 64 : 260,
         minWidth: collapsed ? 64 : 260,
@@ -95,6 +92,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
             »
           </button>
         ) : (
+        <div className="sidebar-brand">
+        <span className="sidebar-brand-mark"><Sparkles size={15} strokeWidth={1.8} /></span>
         <div>
         <div
           style={{
@@ -114,7 +113,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
             marginTop: 2,
           }}
         >
-          Agent Team v42
+          多智能体协作工作台
+        </div>
         </div>
         </div>
         )}
@@ -143,7 +143,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
             marginBottom: 8,
           }}
         >
-          NAVIGATION
+          工作区
         </div>
         )}
         <nav style={{ display: 'flex', flexDirection: 'column' }}>
@@ -186,7 +186,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
                 }}
               >
                 {active && <span style={activeBarStyle} />}
-                <span style={{ fontSize: 12, width: 16, textAlign: 'center' }}>{item.icon}</span>
+          <span style={{ display: 'inline-flex', width: 16, alignItems: 'center', justifyContent: 'center' }}><item.icon size={15} strokeWidth={1.8} /></span>
                 {!collapsed && <span>{item.label}</span>}
               </button>
             );
@@ -207,7 +207,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
             marginBottom: 8,
           }}
         >
-          REVIEW HISTORY
+          最近任务
         </div>
         {history.length === 0 && (
           <div className="empty-state" style={{ padding: '14px 20px' }}>
@@ -425,7 +425,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, pipeline, on
           }}
         >
           <Settings size={14} />
-          {!collapsed && <span>Settings</span>}
+            {!collapsed && <span>设置</span>}
         </button>
       </div>
     </aside>

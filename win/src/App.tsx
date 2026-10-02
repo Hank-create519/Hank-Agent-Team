@@ -6,7 +6,7 @@ import AgentsPanel from './ui/pages/AgentsPanel';
 import ReviewDetail from './ui/pages/ReviewDetail';
 import MonitorPage from './ui/pages/MonitorPage';
 import { useKeyboard } from './ui/hooks/useKeyboard';
-import { Minus, Square, Copy, X } from 'lucide-react';
+import { Minus, Square, Copy, X, PanelRight } from 'lucide-react';
 import { PipelineState, PipelineStage, ModelConfig, Agent } from './core/types';
 import {
   createInitialState,
@@ -648,12 +648,13 @@ const App: React.FC = () => {
   // Render
   // ==========================================================================
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
+    <div className="app-shell" style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
       {/* SIDEBAR */}
       <Sidebar currentPage={page} onNavigate={navigate} pipeline={pipeline} onSelectHistory={handleSelectHistory} />
 
       {/* MAIN CONTENT */}
       <div
+        className="app-main"
         style={{
           flex: 1,
           display: 'flex',
@@ -662,14 +663,14 @@ const App: React.FC = () => {
           background: 'var(--bg-root)',
         }}
       >
-        {/* Tab Navigation */}
+        {/* Page title bar */}
         <div
-          className="liquid-strong"
+          className="liquid-strong app-topbar"
           style={{
             display: 'flex',
             alignItems: 'center',
             padding: '0 16px',
-            height: 38,
+            height: 54,
             borderBottom: '1px solid var(--border)',
             gap: 0,
             flexShrink: 0,
@@ -677,27 +678,11 @@ const App: React.FC = () => {
             ...dragRegion('drag'),
           }}
         >
-          {(Object.keys(TAB_LABELS) as Page[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setPage(tab)}
-              style={{
-                padding: '9px 14px',
-                fontSize: 12,
-                fontWeight: page === tab ? 600 : 400,
-                color: page === tab ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                border: 'none',
-                borderBottom: page === tab ? '2px solid var(--accent)' : '2px solid transparent',
-                background: 'transparent',
-                cursor: 'pointer',
-                transition: 'all 120ms',
-                marginBottom: -1,
-                ...dragRegion('no-drag'),
-              }}
-            >
-              {TAB_LABELS[tab]}
-            </button>
-          ))}
+          <div className="topbar-context" style={dragRegion('no-drag')}>
+            <span className="topbar-page">{TAB_LABELS[page]}</span>
+            <span className="topbar-divider">/</span>
+            <span className="topbar-caption">Hank Agent Team</span>
+          </div>
           {/* Right panel toggle */}
           <button
             onClick={() => setRightPanelOpen(!rightPanelOpen)}
@@ -719,7 +704,7 @@ const App: React.FC = () => {
               ...dragRegion('no-drag'),
             }}
           >
-            &#9776;
+            <PanelRight size={15} />
           </button>
           {/* Windows 自定义标题栏控制按钮 */}
           {isWin && (
@@ -764,7 +749,7 @@ const App: React.FC = () => {
         {/* Page Content（key 驱动切换过渡） */}
         <div
           key={page}
-          className="page-enter"
+          className="page-enter page-viewport"
           style={{
             flex: 1,
             overflow: 'auto',
@@ -776,7 +761,7 @@ const App: React.FC = () => {
 
         {/* Input Bar */}
         <div
-          className="liquid-strong"
+          className="liquid-strong global-taskbar"
           style={{
             borderTop: '1px solid var(--border)',
             padding: '12px 20px',

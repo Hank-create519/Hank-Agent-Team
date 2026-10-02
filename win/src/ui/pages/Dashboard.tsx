@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
-import { PipelineState, Department } from '../../core/types';
-import { Activity, GitBranch, Users, Play, ShieldCheck, Box, Rocket, Gauge, Eye } from 'lucide-react';
+import { PipelineState } from '../../core/types';
+import {
+  Activity,
+  ArrowUpRight,
+  Eye,
+  Gauge,
+  GitBranch,
+  Play,
+  ShieldCheck,
+  Users,
+  Box,
+  Rocket,
+} from 'lucide-react';
 import { STAGE_PROGRESS_FULL } from '../../core/Pipeline';
 import ReviewTemplates from '../components/ReviewTemplates';
 import StatsPanel from '../components/StatsPanel';
@@ -32,33 +43,38 @@ const STAGE_LABELS: Record<string, { label: string; icon: React.ElementType }> =
   done: { label: '完成', icon: ShieldCheck },
 };
 
-const DIFFICULTY_BADGE: Record<string, { label: string; color: string }> = {
-  simple: { label: '简单档 · 快速通道', color: 'var(--accent-green)' },
-  medium: { label: '中等档 · 单轮审查', color: 'var(--accent)' },
-  complex: { label: '复杂档 · 多轮深度审查', color: 'var(--accent-purple)' },
+const DIFFICULTY_BADGE: Record<string, { label: string }> = {
+  simple: { label: '简单档 · 快速通道' },
+  medium: { label: '中等档 · 单轮审查' },
+  complex: { label: '复杂档 · 多轮深度审查' },
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ pipeline, onNavigate, onStartPipeline, batchQueue = [], onStartBatch }) => {
-  const activeAgents = pipeline.agents.filter(a => a.status === 'running').length;
-  const idleAgents = pipeline.agents.filter(a => a.status === 'idle').length;
-  const errorAgents = pipeline.agents.filter(a => a.status === 'error').length;
+const Dashboard: React.FC<DashboardProps> = ({
+  pipeline,
+  onNavigate,
+  onStartPipeline,
+  batchQueue = [],
+  onStartBatch,
+}) => {
+  const activeAgents = pipeline.agents.filter((agent) => agent.status === 'running').length;
+  const idleAgents = pipeline.agents.filter((agent) => agent.status === 'idle').length;
+  const errorAgents = pipeline.agents.filter((agent) => agent.status === 'error').length;
   const totalTasks = pipeline.tasks.length;
-
   const currentStage = STAGE_LABELS[pipeline.stage] || STAGE_LABELS.difficulty_assess;
   const StageIcon = currentStage.icon;
-  const displayProgress = pipeline.progress > 0 ? pipeline.progress : (STAGE_PROGRESS_FULL[pipeline.stage] ?? 0);
+  const displayProgress =
+    pipeline.progress > 0 ? pipeline.progress : (STAGE_PROGRESS_FULL[pipeline.stage] ?? 0);
 
   const [userInput, setUserInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBatchMode, setIsBatchMode] = useState(false);
-  // 运行锁：任务进行中禁止重复提交（引擎会静默忽略，这里直接不让点）
   const busy = isSubmitting || pipeline.isRunning;
 
   const handleSubmit = async () => {
     if (!userInput.trim() || busy) return;
     setIsSubmitting(true);
     if (isBatchMode && onStartBatch) {
-      const lines = userInput.split('\n').map(l => l.trim()).filter(Boolean);
+      const lines = userInput.split('\n').map((line) => line.trim()).filter(Boolean);
       if (lines.length > 1) {
         onStartBatch(lines);
       } else {
@@ -74,203 +90,204 @@ const Dashboard: React.FC<DashboardProps> = ({ pipeline, onNavigate, onStartPipe
 
   const difficultyBadge = pipeline.difficulty ? DIFFICULTY_BADGE[pipeline.difficulty] : null;
 
+  const metrics = [
+    { label: '运行中的 Agent', value: activeAgents, note: '正在处理当前任务', icon: Activity, color: 'var(--accent-green)' },
+    { label: '待命 Agent', value: idleAgents, note: '可随时接手工作', icon: Users, color: 'var(--text-secondary)' },
+    { label: '审查轮次', value: pipeline.reviewAuditCount, note: '瀚海审查框架', icon: ShieldCheck, color: 'var(--accent-secondary)' },
+    { label: '累计任务', value: totalTasks, note: errorAgents ? errorAgents + ' 个 Agent 需要留意' : '团队运行正常', icon: Gauge, color: errorAgents ? 'var(--accent-red)' : 'var(--accent)' },
+  ];
+
+  const quickActions = [
+    { label: '查看任务流程', description: '跟进各阶段产出与执行状态', icon: GitBranch, page: 'pipeline', eyebrow: 'PIPELINE' },
+    { label: '审查结果', description: '检查结论、问题与改进建议', icon: ShieldCheck, page: 'review', eyebrow: 'REVIEW' },
+    { label: '团队活动', description: '查看部门事件与 Agent 动态', icon: Eye, page: 'monitor', eyebrow: 'ACTIVITY' },
+  ];
+
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-      {/* Hero */}
-      <div
-        className="glass-card"
-        style={{ padding: '48px 52px', marginBottom: 36, borderRadius: 'var(--radius-xl)' }}
-      >
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <h1
-            style={{
-              fontSize: 38, fontWeight: 650, letterSpacing: '-0.035em', lineHeight: 1.1,
-              marginBottom: 14,
-              color: 'var(--text-primary)',
-            }}
-          >
-            Hank Agent Team
-          </h1>
-          <p style={{ fontSize: 18, color: 'var(--text-secondary)', lineHeight: 1.7, maxWidth: 640, marginLeft: 'auto', marginRight: 'auto' }}>
-            异构多智能体协作集群 · 指挥部 / 信息部 / 开发部 / 审核部四部门协作，集成瀚海对抗性审查框架。
-          </p>
-
-          {/* 难度徽章 */}
-          {difficultyBadge && (
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              marginTop: 16, padding: '6px 16px', borderRadius: 20,
-              background: `${difficultyBadge.color}15`, border: `1px solid ${difficultyBadge.color}40`,
-            }}>
-              <Gauge size={14} color={difficultyBadge.color} />
-              <span style={{ fontSize: 13, fontWeight: 600, color: difficultyBadge.color }}>
-                {difficultyBadge.label}
-              </span>
-              {pipeline.reviewAuditCount > 0 && (
-                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                  · 已执行 {pipeline.reviewAuditCount} 轮审查框架
-                </span>
-              )}
-            </div>
-          )}
+    <div className="dashboard-shell">
+      <header className="dashboard-header animate-fade-up">
+        <div className="dashboard-kicker">
+          <span className="dashboard-kicker-mark"><Activity size={14} /></span>
+          HANK AGENT TEAM
+          <span className="dashboard-kicker-divider">/</span>
+          工作台
         </div>
 
-        <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div className="dashboard-title-row">
+          <div className="dashboard-title-copy">
+            <h1>让团队把复杂任务，一步步做清楚。</h1>
+            <p>从需求拆解到代码审查，多智能体协作的每一步都在这里清晰呈现。</p>
+          </div>
+          <div className={'workspace-state ' + (pipeline.isRunning ? 'is-running' : 'is-idle')}>
+            <span className="workspace-state-dot" />
+            <span>{pipeline.isRunning ? '任务进行中' : pipeline.stage === 'done' ? '最近任务已完成' : '团队就绪'}</span>
+          </div>
+        </div>
+
+        {pipeline.isRunning && (
+          <div className="dashboard-live-progress">
+            <div className="dashboard-live-progress-copy">
+              <span className="dashboard-live-stage"><StageIcon size={14} />{currentStage.label}</span>
+              <span>{displayProgress}%</span>
+            </div>
+            <div className="dashboard-progress-track">
+              <span style={{ width: displayProgress + '%' }} />
+            </div>
+          </div>
+        )}
+
+        {difficultyBadge && !pipeline.isRunning && (
+          <div className="dashboard-last-run">
+            <Gauge size={14} />
+            <span>最近任务：{difficultyBadge.label}</span>
+            {pipeline.reviewAuditCount > 0 && <span className="dashboard-last-run-detail">· {pipeline.reviewAuditCount} 轮审查</span>}
+          </div>
+        )}
+      </header>
+
+      <section className="task-composer glass-card">
+        <div className="task-composer-heading">
           <div>
-            <label htmlFor="user-input" style={{ display: 'block', fontSize: 14, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 12 }}>
-              请描述你的需求
-              <span style={{ float: 'right', fontSize: 11, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <ReviewTemplates onSelectTemplate={(tpl) => setUserInput(tpl)} />
-                <GitPanel onStartReview={onStartPipeline} />
-                <label style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <input type="checkbox" checked={isBatchMode} onChange={(e) => setIsBatchMode(e.target.checked)} style={{ cursor: 'pointer' }} />
-                  批量模式（每行一个需求）
-                </label>
-              </span>
-            </label>
-            <textarea
-              id="user-input"
-              value={userInput}
-              onChange={e => setUserInput(e.target.value)}
-              placeholder={isBatchMode ? "每行输入一个审查需求...\n审查文件 A 的安全性\n审查文件 B 的性能\n审查文件 C 的代码规范" : "例如：帮我设计一个支持多 Agent 协作的系统架构..."}
-              rows={isBatchMode ? 5 : 3}
-              style={{
-                width: '100%', padding: '14px 18px', borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border)', background: 'var(--bg-card)',
-                color: 'var(--text-primary)', fontSize: 14, resize: 'vertical', minHeight: isBatchMode ? 140 : 120,
-              }}
+            <div className="section-eyebrow">NEW TASK</div>
+            <h2>你想让团队完成什么？</h2>
+            <p>描述目标、背景或限制条件。任务开始后，可以随时查看进度和阶段产出。</p>
+          </div>
+          <div className="task-composer-tools">
+            <ReviewTemplates onSelectTemplate={(template) => setUserInput(template)} />
+            <GitPanel onStartReview={onStartPipeline} />
+          </div>
+        </div>
+
+        <textarea
+          id="user-input"
+          className="dashboard-textarea"
+          value={userInput}
+          onChange={(event) => setUserInput(event.target.value)}
+          placeholder={isBatchMode
+            ? '每行输入一个任务，例如：\n检查认证模块的安全性\n优化列表页的加载性能'
+            : '例如：检查登录流程中的安全问题，并提出可落地的修复建议…'}
+          rows={isBatchMode ? 5 : 4}
+        />
+
+        <div className="task-composer-footer">
+          <label className="batch-mode-control">
+            <input
+              type="checkbox"
+              checked={isBatchMode}
+              onChange={(event) => setIsBatchMode(event.target.checked)}
             />
-          </div>
-
-          <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
-            <button
-              className="btn btn-primary btn-lg"
-              onClick={handleSubmit}
-              disabled={!userInput.trim() || busy}
-              style={{
-                minWidth: 200, boxShadow: '0 0 20px rgba(77, 171, 247, 0.2)',
-                opacity: !userInput.trim() || busy ? 0.6 : 1,
-                cursor: !userInput.trim() || busy ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {busy ? (
-                <span className="dot-loader"><span /><span /><span /></span>
-              ) : '启动流水线'}
-            </button>
-            <button className="btn btn-secondary btn-lg" onClick={() => onNavigate('agents')} style={{ minWidth: 160 }}>
-              配置团队
-            </button>
-          </div>
+            <span className="batch-mode-copy">
+              <strong>批量模式</strong>
+              <small>每行一个任务</small>
+            </span>
+          </label>
+          <span className="composer-hint">支持需求模板和 Git 仓库审查</span>
+          <button
+            className="btn btn-primary task-start-button"
+            onClick={handleSubmit}
+            disabled={!userInput.trim() || busy}
+          >
+            {busy ? (
+              <span className="dot-loader"><span /><span /><span /></span>
+            ) : (
+              <><Play size={15} fill="currentColor" /><span>启动任务</span><ArrowUpRight size={15} /></>
+            )}
+          </button>
         </div>
-      </div>
+      </section>
 
-      {/* Stats Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
-        {[
-          { label: '活跃 Agent', value: activeAgents, color: 'var(--accent-green)', icon: Activity },
-          { label: '待命 Agent', value: idleAgents, color: 'var(--text-tertiary)', icon: Users },
-          { label: '审查框架执行', value: pipeline.reviewAuditCount, color: 'var(--accent-purple)', icon: ShieldCheck },
-          { label: '错误', value: errorAgents, color: 'var(--accent-red)', icon: ShieldCheck },
-        ].map(stat => {
-          const Icon = stat.icon;
-          return (
-            <div key={stat.label} className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 500 }}>{stat.label}</span>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: `${stat.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon size={14} color={stat.color} />
+      <section className="dashboard-section">
+        <div className="section-heading">
+          <div>
+            <h2>运行概况</h2>
+            <p>团队状态与最近一次任务的执行情况</p>
+          </div>
+          <button className="section-link" onClick={() => onNavigate('agents')}>
+            团队配置 <ArrowUpRight size={14} />
+          </button>
+        </div>
+
+        <div className="dashboard-metrics">
+          {metrics.map((metric) => {
+            const Icon = metric.icon;
+            return (
+              <article key={metric.label} className="metric-card glass-card">
+                <div className="metric-card-top">
+                  <span className="metric-label">{metric.label}</span>
+                  <span className="metric-icon" style={{ color: metric.color }}><Icon size={16} /></span>
                 </div>
-              </div>
-              <div style={{ fontSize: 32, fontWeight: 700, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
-            </div>
-          );
-        })}
-      </div>
+                <div className="metric-value" style={{ color: metric.color }}>{metric.value}</div>
+                <div className="metric-note">{metric.note}</div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
 
-      {/* Quick Actions */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-        {[
-          { label: '流水线监控', desc: '查看任务执行流程与各阶段状态', icon: GitBranch, page: 'pipeline' },
-          { label: '审查框架详情', desc: '查看三层审查（准备/判定/总结）', icon: ShieldCheck, page: 'review' },
-          { label: '穿透监控', desc: '单点提问任意部门，查看事件流', icon: Eye, page: 'monitor' },
-        ].map(item => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.label}
-              onClick={() => onNavigate(item.page)}
-              className="glass-card"
-              style={{
-                padding: '24px', border: 'none', cursor: 'pointer', textAlign: 'left',
-                background: 'var(--bg-card)', width: '100%', whiteSpace: 'normal',
-                fontFamily: 'inherit', display: 'block',
-              }}
-            >
-              <div style={{
-                width: 40, height: 40, borderRadius: 10,
-                background: 'rgba(77,171,247,0.1)', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', marginBottom: 12,
-              }}>
-                <Icon size={20} color="var(--accent)" />
-              </div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{item.label}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.5, wordBreak: 'break-all' }}>{item.desc}</div>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* P0-4: Batch Queue */}
-      {batchQueue.length > 0 && (
-        <div style={{ marginTop: 28 }}>
-          <div className="glass-card" style={{ padding: 20 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Activity size={16} color="var(--accent)" />
-              审查队列（{batchQueue.filter(b => b.status === 'done').length}/{batchQueue.length}）
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {batchQueue.map((item, i) => {
-                const statusColors: Record<string, string> = {
-                  queued: 'var(--text-tertiary)',
-                  running: 'var(--accent)',
-                  done: 'var(--accent-green)',
-                  failed: 'var(--accent-red)',
-                };
-                const statusLabels: Record<string, string> = {
-                  queued: '排队中',
-                  running: '执行中',
-                  done: '已完成',
-                  failed: '失败',
-                };
-                return (
-                  <div key={item.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '8px 12px', borderRadius: 6,
-                    background: 'rgba(255,255,255,0.02)', fontSize: 13,
-                  }}>
-                    <span style={{ color: 'var(--text-tertiary)', fontSize: 11, width: 24 }}>#{i + 1}</span>
-                    <span style={{ color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {item.userInput.length > 60 ? item.userInput.slice(0, 60) + '...' : item.userInput}
-                    </span>
-                    <span style={{
-                      padding: '2px 8px', borderRadius: 4,
-                      background: `${statusColors[item.status]}15`,
-                      color: statusColors[item.status], fontSize: 11, fontWeight: 600,
-                      flexShrink: 0,
-                    }}>
-                      {item.status === 'running' && <span style={{ animation: 'dot-pulse 1.4s var(--spring) infinite' }}>● </span>}
-                      {statusLabels[item.status]}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+      <section className="dashboard-section">
+        <div className="section-heading">
+          <div>
+            <h2>继续查看</h2>
+            <p>进入任务执行过程中的其他工作区</p>
           </div>
         </div>
+        <div className="quick-action-grid">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <button
+                key={action.page}
+                className="quick-action-card glass-card"
+                onClick={() => onNavigate(action.page)}
+              >
+                <span className="quick-action-eyebrow">{action.eyebrow}</span>
+                <span className="quick-action-icon"><Icon size={18} /></span>
+                <span className="quick-action-title">{action.label}</span>
+                <span className="quick-action-description">{action.description}</span>
+                <ArrowUpRight className="quick-action-arrow" size={16} />
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {batchQueue.length > 0 && (
+        <section className="dashboard-section batch-queue-section">
+          <div className="section-heading">
+            <div>
+              <h2>任务队列</h2>
+              <p>{batchQueue.filter((item) => item.status === 'done').length} / {batchQueue.length} 个任务已完成</p>
+            </div>
+          </div>
+          <div className="batch-queue-list glass-card">
+            {batchQueue.map((item, index) => {
+              const statusLabels: Record<string, string> = {
+                queued: '排队中',
+                running: '执行中',
+                done: '已完成',
+                failed: '失败',
+              };
+              return (
+                <div key={item.id} className={'queue-item queue-item-' + item.status}>
+                  <span className="queue-index">{String(index + 1).padStart(2, '0')}</span>
+                  <span className="queue-text" title={item.userInput}>{item.userInput}</span>
+                  <span className={'queue-status queue-status-' + item.status}>
+                    {item.status === 'running' && <span className="queue-status-pulse" />}
+                    {statusLabels[item.status]}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
-      <StatsPanel history={useAppStore((s) => s.history)} />
+
+      <div className="dashboard-history">
+        <StatsPanel history={useAppStore((store) => store.history)} />
+      </div>
     </div>
   );
 };
 
 export default Dashboard;
+

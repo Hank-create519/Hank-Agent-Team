@@ -351,6 +351,7 @@ const App: React.FC = () => {
     if (!rightPanelOpen) return null;
     return (
       <div
+        className="panel-enter"
         style={{
           width: 320,
           minWidth: 320,
@@ -579,25 +580,13 @@ const App: React.FC = () => {
   // Render
   // ==========================================================================
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
-      {/* Drag region */}
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 38,
-          zIndex: 100,
-          ...({ WebkitAppRegion: 'drag' } as React.CSSProperties),
-        }}
-      />
-
+    <div className="app-shell" style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
       {/* SIDEBAR */}
       <Sidebar currentPage={page} onNavigate={navigate} pipeline={pipeline} onSelectHistory={handleSelectHistory} />
 
       {/* MAIN CONTENT */}
       <div
+        className="app-main"
         style={{
           flex: 1,
           display: 'flex',
@@ -606,38 +595,25 @@ const App: React.FC = () => {
           background: 'var(--bg-root)',
         }}
       >
-        {/* Tab Navigation */}
+        {/* Page title bar */}
         <div
+          className="liquid-strong app-topbar"
           style={{
             display: 'flex',
             alignItems: 'center',
             padding: '0 16px',
-            height: 38,
+            height: 54,
             borderBottom: '1px solid var(--border)',
             gap: 0,
             flexShrink: 0,
+            ...({ WebkitAppRegion: 'drag' } as React.CSSProperties),
           }}
         >
-          {(Object.keys(TAB_LABELS) as Page[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setPage(tab)}
-              style={{
-                padding: '9px 14px',
-                fontSize: 12,
-                fontWeight: page === tab ? 600 : 400,
-                color: page === tab ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                border: 'none',
-                borderBottom: page === tab ? '2px solid var(--accent)' : '2px solid transparent',
-                background: 'transparent',
-                cursor: 'pointer',
-                transition: 'all 120ms',
-                marginBottom: -1,
-              }}
-            >
-              {TAB_LABELS[tab]}
-            </button>
-          ))}
+          <div className="topbar-context">
+            <span className="topbar-page">{TAB_LABELS[page]}</span>
+            <span className="topbar-divider">/</span>
+            <span className="topbar-caption">Hank Agent Team</span>
+          </div>
           {/* Right panel toggle */}
           <button
             onClick={() => setRightPanelOpen(!rightPanelOpen)}
@@ -656,6 +632,7 @@ const App: React.FC = () => {
               fontSize: 13,
               cursor: 'pointer',
               transition: 'all 120ms',
+              ...({ WebkitAppRegion: 'no-drag' } as React.CSSProperties),
             }}
           >
             &#9776;
@@ -664,6 +641,7 @@ const App: React.FC = () => {
 
         {/* Page Content */}
         <div
+          className="page-enter page-viewport"
           style={{
             flex: 1,
             overflow: 'auto',
@@ -675,6 +653,7 @@ const App: React.FC = () => {
 
         {/* Input Bar */}
         <div
+          className="liquid-strong global-taskbar"
           style={{
             borderTop: '1px solid var(--border)',
             background: 'var(--bg-elevated)',
