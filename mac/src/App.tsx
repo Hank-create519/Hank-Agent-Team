@@ -319,7 +319,7 @@ const App: React.FC = () => {
   const renderPage = () => {
     switch (page) {
       case 'dashboard':
-        return <Dashboard pipeline={pipeline} onNavigate={navigate} onStartPipeline={handleStartPipeline} batchQueue={batchQueue} onStartBatch={handleStartBatch} />;
+        return <Dashboard pipeline={pipeline} onNavigate={navigate} onStartPipeline={handleStartPipeline} batchQueue={batchQueue} onStartBatch={handleStartBatch} onSelectHistory={handleSelectHistory} />;
       case 'pipeline':
         return (
           <PipelineView pipeline={pipeline} onStageChange={() => {}} onTogglePause={togglePause} />
@@ -653,7 +653,7 @@ const App: React.FC = () => {
 
         {/* Input Bar */}
         <div
-          className="liquid-strong global-taskbar"
+          className={"liquid-strong global-taskbar " + (page === 'dashboard' ? 'studio-taskbar-hidden' : '')}
           style={{
             borderTop: '1px solid var(--border)',
             background: 'var(--bg-elevated)',
