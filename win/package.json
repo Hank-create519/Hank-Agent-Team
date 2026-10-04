@@ -1,6 +1,6 @@
 {
   "name": "hank-agent-team",
-  "version": "2.1.5",
+  "version": "2.2.0",
   "description": "Hank Agent Team - 多部门AI协作流水线系统",
   "author": "Hank",
   "main": "electron-main.js",
@@ -54,7 +54,8 @@
       "dist/**/*",
       "electron-main.js",
       "preload.js",
-      "package.json"
+      "package.json",
+      "electron/**/*.cjs"
     ],
     "mac": {
       "target": [

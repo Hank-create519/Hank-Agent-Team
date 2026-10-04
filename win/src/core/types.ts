@@ -6,6 +6,9 @@ export type Department = 'command' | 'info' | 'develop' | 'review';
 
 // Agent 实例
 export interface Agent {
+  // V2.2：apiKey 字段仅保留类型兼容，运行时恒为 ''（迁移后密钥在主进程 safeStorage）。
+  // hasKey 表示该 Agent 是否已配置密钥（渲染层据此显示徽标）。
+  hasKey?: boolean;
   id: string;
   name: string;
   department: Department;

@@ -509,8 +509,11 @@ export async function startPipeline(userInput: string) {
     reviewFramework: null,
     monitorEvents: [],
     reviewAuditCount: 0,
-    // 运行模式：全员无 Key = 演示任务；live 任务中 demo 来源产出不得通过门禁
-    runMode: _state.agents.some(a => a.apiKey) ? 'live' : 'demo',
+    // 运行模式：桌面端 + 任一 Agent 已配置密钥 = live；否则演示。
+    // live 任务中 demo 来源产出不得通过门禁。
+    runMode: (typeof window !== 'undefined'
+      && !!(window as unknown as { electronAPI?: { llmCall?: unknown } }).electronAPI?.llmCall
+      && _state.agents.some(a => a.hasKey)) ? 'live' : 'demo',
     pauseReason: undefined,
     difficultyDegraded: false,
   };
@@ -1071,9 +1074,15 @@ export class ReviewEngine {
 // 默认单例
 export const engine = new ReviewEngine();
 
-// 对话面板消息发送（ChatPanel）
-export async function sendChatMessage(message: string): Promise<void> {
-  // ChatPanel integration — placeholder
-  // In a full implementation, this would post to the pipeline's message bus.
-  console.log('[ChatPanel]', message);
+// 对话面板：把消息写入引擎状态（ChatPanel 渲染 pipeline.chatMessages）
+export function pushChatMessage(role: 'user' | 'assistant', content: string, name = ''): void {
+  _state = {
+    ..._state,
+    chatMessages: [...(_state.chatMessages || []), {
+      id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      role, name, content,
+      timestamp: Date.now(),
+    }].slice(-50),
+  };
+  notify();
 }

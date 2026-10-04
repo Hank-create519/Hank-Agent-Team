@@ -26,7 +26,8 @@ const GitPanel: React.FC<GitPanelProps> = ({ onStartReview }) => {
       const win = window as any;
       if (win.electronAPI?.exec) {
         // exec 返回 { stdout, stderr, code }；用数组参数避免路径空格/选项注入
-        const result = await win.electronAPI.exec(['git', 'diff', '--name-only']);
+        // 绑定活动工作区（Workspace Manager；未注册则退回应用默认目录）
+        const result = await win.electronAPI.exec({ args: ['diff', '--name-only'] });
         if (result.code !== 0) {
           setError(result.stderr || 'git diff 执行失败（当前目录可能不是 Git 仓库）');
           return;
@@ -65,7 +66,7 @@ const GitPanel: React.FC<GitPanelProps> = ({ onStartReview }) => {
     const diffContents: string[] = [];
     for (const file of selected) {
       try {
-        const result = await win.electronAPI.exec(['git', 'diff', '--', file.path]);
+        const result = await win.electronAPI.exec({ args: ['diff', '--', file.path] });
         const diffText = result?.stdout || '';
         diffContents.push(`## ${file.path}\n\`\`\`diff\n${diffText || '[无差异]'}\n\`\`\``);
       } catch (e) {

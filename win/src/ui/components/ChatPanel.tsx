@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ArrowUp, Square, Plus } from 'lucide-react';
 import { ChatMessage, PipelineState, PipelineStage } from '../../core/types';
-import { sendChatMessage, pause, resume, stop, STAGE_LABELS } from '../../core/Engine';
+import { pause, resume, stop, STAGE_LABELS, pushChatMessage } from '../../core/Engine';
+import { handleChatMessage } from '../../core/chatRouter';
 
 interface ChatPanelProps { pipeline: PipelineState; }
 
@@ -22,7 +23,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ pipeline }) => {
   const send = async () => {
     if (!input.trim() || busy) return;
     setBusy(true); const msg = input; setInput('');
-    try { await sendChatMessage(msg); } finally { setBusy(false); }
+    pushChatMessage('user', msg, '你');
+    try {
+      const answer = await handleChatMessage(msg);
+      pushChatMessage('assistant', answer, 'Hank');
+    } catch (e) {
+      pushChatMessage('assistant', `处理失败：${e instanceof Error ? e.message : String(e)}`, 'Hank');
+    } finally { setBusy(false); }
   };
 
   const messages = pipeline.chatMessages || [];

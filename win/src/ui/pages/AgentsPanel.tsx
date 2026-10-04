@@ -47,62 +47,33 @@ const ModelRegistry: React.FC<{
   const agentsByModel = new Map<string, Agent[]>();
   const [testStatus, setTestStatus] = useState<Record<string, 'testing' | 'ok' | 'fail' | null>>({});
   const [testError, setTestError] = useState<Record<string, string>>({});
+  const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
 
-  // 连接测试：按模型 provider 选择对应协议（与 llm.ts 的路由保持一致），
-  // 避免用 OpenAI 兼容接口误测 Anthropic / Google 的 Key。
+  // 连接测试：走主进程 LLM Gateway（密钥在 safeStorage，渲染层不接触明文）
   const handleTest = async (agent: Agent, model: ModelConfig) => {
     setTestStatus((prev) => ({ ...prev, [agent.id]: 'testing' }));
     try {
-      const provider = model?.provider || '';
-      let res: Response;
-
-      if (provider === 'Anthropic') {
-        const baseUrl = (agent.baseUrl || 'https://api.anthropic.com/v1').replace(/\/+$/, '');
-        res = await fetch(baseUrl + '/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': agent.apiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model: model.id,
-            messages: [{ role: 'user', content: 'ping' }],
-            max_tokens: 1,
-          }),
-        });
-      } else if (provider === 'Google') {
-        const baseUrl = (agent.baseUrl || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
-        res = await fetch(`${baseUrl}/v1beta/models/${model.id}:generateContent?key=${agent.apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
-            generationConfig: { maxOutputTokens: 1 },
-          }),
-        });
-      } else {
-        const baseUrl = (agent.baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
-        res = await fetch(baseUrl + '/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${agent.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: model.id,
-            messages: [{ role: 'user', content: 'ping' }],
-            max_tokens: 1,
-          }),
-        });
+      const api = (window as unknown as {
+        electronAPI?: {
+          llmTest?: (p: unknown) => Promise<{ ok: boolean; error?: string; elapsedMs: number }>;
+        };
+      }).electronAPI;
+      if (!api?.llmTest) {
+        setTestStatus((prev) => ({ ...prev, [agent.id]: 'fail' }));
+        setTestError((prev) => ({ ...prev, [agent.id]: '仅桌面应用支持连接测试' }));
+        return;
       }
-
-      if (res.ok) {
+      const r = await api.llmTest({
+        agentId: agent.id,
+        provider: model?.provider || 'OpenAI',
+        model: model.id,
+        baseUrl: agent.baseUrl || undefined,
+      });
+      if (r.ok) {
         setTestStatus((prev) => ({ ...prev, [agent.id]: 'ok' }));
       } else {
-        const text = await res.text();
         setTestStatus((prev) => ({ ...prev, [agent.id]: 'fail' }));
-        setTestError((prev) => ({ ...prev, [agent.id]: text.slice(0, 200) }));
+        setTestError((prev) => ({ ...prev, [agent.id]: (r.error || '连接失败').slice(0, 200) }));
       }
     } catch (e: any) {
       setTestStatus((prev) => ({ ...prev, [agent.id]: 'fail' }));
@@ -366,16 +337,21 @@ const ModelRegistry: React.FC<{
                                 <div style={{ flex: 1 }}>
                                   <input
                                     type="password"
-                                    placeholder="API Key (sk-...)"
-                                    value={agent.apiKey}
-                                    onChange={e => onUpdateAgent(agent.id, { apiKey: e.target.value })}
+                                    placeholder={agent.hasKey ? '已配置 ✓（输入新 Key 覆盖）' : 'API Key (sk-...)'}
+                                    value={keyDrafts[agent.id] ?? ''}
+                                    onChange={e => setKeyDrafts(prev => ({ ...prev, [agent.id]: e.target.value }))}
+                                    onBlur={e => {
+                                      const v = e.target.value;
+                                      if (!v) return;
+                                      void commitKey(agent.id, v, onUpdateAgent).then(() => setKeyDrafts(prev => ({ ...prev, [agent.id]: '' })));
+                                    }}
                                     className="glass-input"
                                     style={{ width: '100%' }}
                                   />
                                 </div>
                                 <button
                                   onClick={() => handleTest(agent, m)}
-                                  disabled={!agent.apiKey || testStatus[agent.id] === 'testing'}
+                                  disabled={!(agent.hasKey || agent.apiKey) || testStatus[agent.id] === 'testing'}
                                   title={testError[agent.id] || ''}
                                   style={{
                                     padding: '4px 10px',
@@ -384,7 +360,7 @@ const ModelRegistry: React.FC<{
                                     background: testStatus[agent.id] === 'ok' ? 'rgba(34,197,94,0.15)' : testStatus[agent.id] === 'fail' ? 'rgba(239,68,68,0.15)' : 'transparent',
                                     color: testStatus[agent.id] === 'ok' ? 'var(--accent-green)' : testStatus[agent.id] === 'fail' ? 'var(--accent-red)' : 'var(--accent)',
                                     fontSize: 11,
-                                    cursor: agent.apiKey ? 'pointer' : 'not-allowed',
+                                    cursor: (agent.hasKey || agent.apiKey) ? 'pointer' : 'not-allowed',
                                     fontFamily: 'inherit',
                                     flexShrink: 0,
                                     minWidth: 44,
@@ -661,9 +637,14 @@ const AgentCard: React.FC<{
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input
             type={showKey ? 'text' : 'password'}
-            placeholder="sk-..."
-            value={agent.apiKey}
-            onChange={e => onUpdateAgent(agent.id, { apiKey: e.target.value })}
+            placeholder={agent.hasKey ? '已配置 ✓（输入新 Key 覆盖）' : 'sk-...'}
+            value={keyDrafts[agent.id] ?? ''}
+            onChange={e => setKeyDrafts(prev => ({ ...prev, [agent.id]: e.target.value }))}
+            onBlur={e => {
+              const v = e.target.value;
+              if (!v) return;
+              void commitKey(agent.id, v, onUpdateAgent).then(() => setKeyDrafts(prev => ({ ...prev, [agent.id]: '' })));
+            }}
             className="glass-input"
             style={{ flex: 1, padding: '5px 8px', fontSize: 12 }}
           />

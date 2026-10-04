@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import Sidebar from './ui/components/Sidebar';
+import ChatPanel from './ui/components/ChatPanel';
 import Dashboard from './ui/pages/Dashboard';
 import PipelineView from './ui/pages/PipelineView';
 import AgentsPanel from './ui/pages/AgentsPanel';
@@ -26,6 +27,38 @@ import {
 import { useAppStore, subscribeConfigSync } from './store/appStore';
 import type { HistoryItem } from './store/appStore';
 
+// 密钥迁移（V2.2 步骤③，一次性）：
+// localStorage 中 agents 的明文 apiKey → 主进程 safeStorage（验证写入成功后才清除渲染层明文）。
+// 失败的 Agent 保留原 key 不动（不直接删），下次启动重试。
+async function migrateSecretsToMain() {
+  const api = (window as unknown as {
+    electronAPI?: { secretsSet?: (id: string, k: string) => Promise<boolean>; secretsList?: () => Promise<string[]> };
+  }).electronAPI;
+  if (!api?.secretsSet || !api.secretsList) return; // 浏览器模式跳过
+  if (localStorage.getItem('secrets-migration-v1') === 'done') return;
+
+  const { agents, updateAgent } = useAppStore.getState();
+  const configured = new Set(await api.secretsList());
+  let migrated = 0;
+  for (const agent of agents) {
+    if (!agent.apiKey) {
+      if (configured.has(agent.id) && !agent.hasKey) updateAgent(agent.id, { hasKey: true });
+      continue;
+    }
+    try {
+      await api.secretsSet(agent.id, agent.apiKey);
+      const verified = (await api.secretsList()).includes(agent.id);
+      if (!verified) continue; // 写入未确认 → 保留明文，下次重试
+      updateAgent(agent.id, { apiKey: '', hasKey: true });
+      migrated += 1;
+    } catch {
+      // 迁移失败：保留明文 key，下次启动重试
+    }
+  }
+  localStorage.setItem('secrets-migration-v1', 'done');
+  console.info(`[secrets] 迁移完成：${migrated} 个密钥已转入主进程安全存储`);
+}
+
 // 阶段产出持久化：通过主进程 IPC 原子写入 userData（无 IPC 环境下静默跳过）
 setPersistHandler(async (action, payload) => {
   const api = (window as unknown as { electronAPI?: { persistSave?: (a: string, p: unknown) => Promise<boolean> } }).electronAPI;
@@ -50,6 +83,7 @@ const useEngineState = () => {
   useEffect(() => {
     const { agents, models } = useAppStore.getState();
     syncFromApp({ ...state, agents, models });
+    void migrateSecretsToMain();
 
     const unsubscribe = subscribe(() => {
       setState(getState());
@@ -88,7 +122,7 @@ const App: React.FC = () => {
   const [page, setPage] = useState<Page>('dashboard');
   const pipeline = useEngineState();
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
-  const [rightPanelTab, setRightPanelTab] = useState<'review' | 'monitor' | 'agents'>('review');
+  const [rightPanelTab, setRightPanelTab] = useState<'review' | 'monitor' | 'agents' | 'chat'>('review');
   const [inputValue, setInputValue] = useState('');
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
 
@@ -441,7 +475,7 @@ const App: React.FC = () => {
             gap: 0,
           }}
         >
-          {(['review', 'monitor', 'agents'] as const).map((tab) => (
+          {(['review', 'monitor', 'agents', 'chat'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setRightPanelTab(tab)}
@@ -457,7 +491,7 @@ const App: React.FC = () => {
                 transition: 'all 120ms',
               }}
             >
-              {tab === 'review' ? '审查' : tab === 'monitor' ? '监控' : 'Agent'}
+              {tab === 'review' ? '审查' : tab === 'monitor' ? '监控' : tab === 'chat' ? '对话' : 'Agent'}
             </button>
           ))}
           <button
@@ -592,6 +626,9 @@ const App: React.FC = () => {
             </div>
           )}
 
+          {rightPanelTab === 'chat' && (
+            <ChatPanel pipeline={pipeline} />
+          )}
           {rightPanelTab === 'agents' && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>

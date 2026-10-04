@@ -529,56 +529,51 @@ export async function callLLM(
   const start = Date.now();
   const model = models.find(m => m.id === agent.model);
 
-  // 无 Key → 演示模式（模拟网络延迟）
-  if (!agent.apiKey) {
-    await delay(600 + Math.random() * 700);
-    return {
-      content: mockResponse(stage, userPrompt),
-      elapsedMs: Date.now() - start,
-      mock: true,
-      retryCount: 0,
-      status: 'demo',
-    };
+  // ===== V2.2：桌面应用 → 主进程 LLM Gateway（密钥/协议/重试/工具循环全在主进程）=====
+  const electronAPI = (window as unknown as { electronAPI?: { llmCall?: (p: unknown) => Promise<{ content: string; error?: string; elapsedMs: number; status: 'live' | 'failed'; toolCalls?: Array<{ name: string; ok: boolean }> }> } }).electronAPI;
+  if (electronAPI?.llmCall) {
+    try {
+      const r = await electronAPI.llmCall({
+        agentId: agent.id,
+        provider: model?.provider || 'OpenAI',
+        model: agent.model,
+        baseUrl: agent.baseUrl || undefined,
+        systemPrompt: agent.systemPrompt || '你是 Hank Agent Team 的一员，请按要求完成任务。',
+        userPrompt,
+        dept: agent.department,
+        stage,
+        sessionId: `task_${agent.id}`,
+      });
+      return {
+        content: r.content || '',
+        error: r.error,
+        elapsedMs: r.elapsedMs,
+        mock: r.status !== 'live',
+        retryCount: 0,
+        status: r.status,
+      };
+    } catch (e: unknown) {
+      return {
+        content: '',
+        error: e instanceof Error ? e.message : String(e),
+        elapsedMs: Date.now() - start,
+        mock: false,
+        retryCount: 0,
+        status: 'failed',
+      };
+    }
   }
 
-  // 有 Key → 真实调用
-  try {
-    const provider = routeProvider(model);
-    const baseUrl = resolveBaseUrl(agent, model);
-    const modelName = resolveModelName(agent);
-    const systemPrompt = agent.systemPrompt || '你是 Hank Agent Team 的一员，请按要求完成任务。';
-
-    let content: string;
-    let retryCount = 0;
-    if (provider === 'anthropic') {
-      const result = await callAnthropic(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt, signal);
-      content = result.content;
-      retryCount = result.retryCount;
-    } else if (provider === 'google') {
-      const result = await callGoogle(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt, signal);
-      content = result.content;
-      retryCount = result.retryCount;
-    } else {
-      const result = await callOpenAICompat(baseUrl, agent.apiKey, modelName, systemPrompt, userPrompt, signal);
-      content = result.content;
-      retryCount = result.retryCount;
-    }
-
-    if (!content) {
-      return { content: '', error: '模型返回空响应', elapsedMs: Date.now() - start, mock: false, retryCount, status: 'failed' };
-    }
-    return { content, elapsedMs: Date.now() - start, mock: false, retryCount, status: 'live' };
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return {
-      content: '',
-      error: msg,
-      elapsedMs: Date.now() - start,
-      mock: false,
-      retryCount: 0,
-      status: 'failed',
-    };
-  }
+  // ===== 浏览器模式（无 Electron bridge）：仅演示 =====
+  // 真实调用一律走桌面应用的主进程 Gateway（密钥在安全存储，渲染层不可见）。
+  await delay(600 + Math.random() * 700);
+  return {
+    content: mockResponse(stage, userPrompt),
+    elapsedMs: Date.now() - start,
+    mock: true,
+    retryCount: 0,
+    status: 'demo',
+  };
 }
 
 function delay(ms: number): Promise<void> {

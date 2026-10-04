@@ -4,6 +4,20 @@ const fs = require('fs');
 const fsp = fs.promises;
 const { execFile } = require('child_process');
 
+// ==================== V2.2 基础设施（主进程独占） ====================
+const secrets = require('./electron/secrets.cjs');
+const audit = require('./electron/audit.cjs');
+const gateway = require('./electron/llm-gateway.cjs');
+const toolRuntime = require('./electron/tool-runtime.cjs');
+const workspaces = require('./electron/workspaces.cjs');
+
+app.whenReady().then(() => {
+  const userDataPath = app.getPath('userData');
+  secrets.init({ userDataPath, safeStorage: require('electron').safeStorage });
+  audit.init({ userDataPath });
+  workspaces.init({ userDataPath });
+});
+
 function createWindow() {
   const isMac = process.platform === 'darwin';
 
@@ -118,6 +132,45 @@ ipcMain.handle('exec', async (event, command) => {
     });
   });
 });
+
+// ==================== V2.2 IPC：Secrets / LLM Gateway / Workspaces ====================
+// 密钥：渲染层只能 set/delete/list（agentId 列表），永远拿不到内容
+ipcMain.handle('secrets-set', (event, agentId, plain) => {
+  requireMainWindow(event);
+  return secrets.setSecret(String(agentId), String(plain));
+});
+ipcMain.handle('secrets-delete', (event, agentId) => {
+  requireMainWindow(event);
+  return secrets.deleteSecret(String(agentId));
+});
+ipcMain.handle('secrets-list', (event) => {
+  requireMainWindow(event);
+  return secrets.listSecrets();
+});
+
+// LLM Gateway：渲染层传业务参数（agentId/provider/model/prompt），密钥解析与 HTTP 全在主进程
+ipcMain.handle('llm-call', (event, payload) => {
+  requireMainWindow(event);
+  return gateway.callLLM(payload || {});
+});
+ipcMain.handle('llm-test', (event, payload) => {
+  requireMainWindow(event);
+  return gateway.testConnection(payload || {});
+});
+
+// 工作区管理
+ipcMain.handle('workspace-add', (event, ws) => { requireMainWindow(event); return workspaces.add(ws || {}); });
+ipcMain.handle('workspace-list', (event) => { requireMainWindow(event); return workspaces.list(); });
+ipcMain.handle('workspace-remove', (event, id) => { requireMainWindow(event); return workspaces.remove(String(id)); });
+ipcMain.handle('workspace-set-active', (event, id) => { requireMainWindow(event); return workspaces.setActive(String(id)); });
+
+// 审计日志尾部（调试面板用）
+ipcMain.handle('audit-tail', (event, n) => { requireMainWindow(event); return audit.tail(Number(n) || 50); });
+
+function requireMainWindow(event) {
+  const win = BrowserWindow.getAllWindows().find((w) => w.webContents.id === event.sender.id);
+  if (!win) throw new Error('非法来源');
+}
 
 // ==================== 阶段产出持久化（原子写入 userData） ====================
 // 仅接受主窗口渲染进程的请求；写临时文件后 rename 覆盖，避免写入中断导致损坏。
