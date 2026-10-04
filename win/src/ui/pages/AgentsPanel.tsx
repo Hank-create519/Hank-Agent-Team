@@ -37,6 +37,33 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 // =========== 模型注册表（厂商折叠 + 模型展开显示 Agent API） ===========
+// 密钥提交：写入主进程 safeStorage（渲染层不保留明文）；失败保留原值如实提示
+const commitKey = async (agentId: string, raw: string, onUpdateAgent: (id: string, u: Partial<Agent>) => void): Promise<string> => {
+  const api = (window as unknown as {
+    electronAPI?: {
+      secretsSet?: (id: string, k: string) => Promise<boolean>;
+      secretsDelete?: (id: string) => Promise<boolean>;
+    };
+  }).electronAPI;
+  try {
+    if (raw) {
+      if (api?.secretsSet) {
+        await api.secretsSet(agentId, raw);
+        onUpdateAgent(agentId, { apiKey: '', hasKey: true });
+        return '已保存到系统安全存储';
+      }
+      onUpdateAgent(agentId, { apiKey: raw });
+      return '已保存（浏览器模式）';
+    }
+    if (api?.secretsDelete) { await api.secretsDelete(agentId); }
+    onUpdateAgent(agentId, { apiKey: '', hasKey: false });
+    return '已清除';
+  } catch (e) {
+    onUpdateAgent(agentId, { apiKey: raw, hasKey: false });
+    return `保存失败：${e instanceof Error ? e.message : String(e)}`;
+  }
+};
+
 const ModelRegistry: React.FC<{
   models: ModelConfig[];
   agents: Agent[];
@@ -420,6 +447,7 @@ const AgentCard: React.FC<{
   const [showKey, setShowKey] = useState(false);
   const [skillInput, setSkillInput] = useState('');
   const [skillDropdown, setSkillDropdown] = useState(false);
+  const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
   const name = getModelDisplayName(models, agent.model);
 
   // 基于当前输入过滤 skillRegistry，排除已添加的
