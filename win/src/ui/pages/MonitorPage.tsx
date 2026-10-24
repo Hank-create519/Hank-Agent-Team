@@ -178,7 +178,6 @@ const MonitorPage: React.FC<MonitorPageProps> = ({ pipeline }) => {
                   padding: '2px 4px', borderRadius: 4, flexShrink: 0,
                   background: 'var(--bg-card-hover)', color: meta.color,
                   fontSize: 10, fontWeight: 700,
-                  title: evt.type,
                 }}>
                   {meta.icon}
                 </span>
